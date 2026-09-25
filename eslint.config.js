@@ -52,5 +52,22 @@ export default tseslint.config(
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
     },
+  },
+  {
+    // Plan §10.7: status columns change only through applyRideTransition /
+    // applyPoolTransition in domain-writes/ — nowhere else may `.set()` a
+    // `status` field, so a history row can never be forgotten.
+    files: ["apps/api/src/**/*.ts"],
+    ignores: ["apps/api/src/domain-writes/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.property.name='set'] ObjectExpression Property[key.name='status']",
+          message:
+            "Only domain-writes/ may set a status column directly — use applyRideTransition/applyPoolTransition (plan §10.7).",
+        },
+      ],
+    },
   }
 );

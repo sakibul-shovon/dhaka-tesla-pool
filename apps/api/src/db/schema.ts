@@ -99,6 +99,11 @@ export const vehicles = pgTable(
   ],
 );
 
+// Named so the app layer can recognise a 23505 on this exact index as
+// "one active ride per passenger" without guessing a string (plan §11
+// defence-in-depth).
+export const RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX = "ride_requests_active_per_passenger";
+
 export const rideRequests = pgTable(
   "ride_requests",
   {
@@ -127,7 +132,7 @@ export const rideRequests = pgTable(
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex("ride_requests_active_per_passenger")
+    uniqueIndex(RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX)
       .on(table.passengerId)
       .where(sql`${table.status} IN ('REQUESTED','MATCHED','DRIVER_ARRIVED','STARTED')`),
     index("ride_requests_passenger_history").on(

@@ -3,6 +3,7 @@ import type { Db, Tx } from "../../db/client.js";
 import { RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX, rideRequests, rideStatusHistory } from "../../db/schema.js";
 import { ACTIVE_RIDE_STATUSES, type RideStatus } from "../../domain/ride-state-machine.js";
 import { markLocked, type Locked } from "../../domain-writes/locked.js";
+import type { LockOrderGuard } from "../../lib/lock-order.js";
 
 export { RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX };
 
@@ -108,9 +109,11 @@ export async function lockRideRequestForOwner(
   tx: Tx,
   id: string,
   passengerId: string,
-): Promise<Locked<{ id: string; status: RideStatus }> | undefined> {
+  guard: LockOrderGuard,
+): Promise<Locked<{ id: string; status: RideStatus; seats: number }> | undefined> {
+  guard.assert("requests");
   const [row] = await tx
-    .select({ id: rideRequests.id, status: rideRequests.status })
+    .select({ id: rideRequests.id, status: rideRequests.status, seats: rideRequests.seats })
     .from(rideRequests)
     .where(and(eq(rideRequests.id, id), eq(rideRequests.passengerId, passengerId)))
     .for("update");

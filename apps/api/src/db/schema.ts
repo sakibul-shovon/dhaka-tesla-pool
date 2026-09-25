@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigserial,
   boolean,
   check,
   index,
@@ -214,6 +215,48 @@ export const poolMemberships = pgTable(
       sql`${table.finalFarePaisa} IS NULL OR ${table.finalFarePaisa} >= 0`,
     ),
   ],
+);
+
+// Append-only: mutation is blocked by a trigger added in a later migration
+// (drizzle's schema can declare structure, not triggers).
+export const rideStatusHistory = pgTable(
+  "ride_status_history",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    rideRequestId: uuid("ride_request_id")
+      .notNull()
+      .references(() => rideRequests.id, { onDelete: "restrict" }),
+    fromStatus: rideStatusEnum("from_status"),
+    toStatus: rideStatusEnum("to_status").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "restrict" }),
+    reason: text("reason"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("ride_status_history_timeline").on(
+      table.rideRequestId,
+      table.createdAt,
+      table.id,
+    ),
+  ],
+);
+
+export const poolStatusHistory = pgTable(
+  "pool_status_history",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    poolId: uuid("pool_id")
+      .notNull()
+      .references(() => pools.id, { onDelete: "restrict" }),
+    fromStatus: poolStatusEnum("from_status"),
+    toStatus: poolStatusEnum("to_status").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "restrict" }),
+    reason: text("reason"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("pool_status_history_timeline").on(table.poolId, table.createdAt, table.id)],
 );
 
 export const idempotencyKeys = pgTable(

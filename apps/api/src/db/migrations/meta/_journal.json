@@ -15,6 +15,20 @@
       "when": 1790349810617,
       "tag": "0001_ride_and_pool_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790349854730,
+      "tag": "0002_status_history_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790349859170,
+      "tag": "0003_history_immutability_trigger",
+      "breakpoints": true
     }
   ]
 }

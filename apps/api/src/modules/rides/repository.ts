@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client.js";
 import { RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX, rideRequests, rideStatusHistory } from "../../db/schema.js";
 import { ACTIVE_RIDE_STATUSES, type RideStatus } from "../../domain/ride-state-machine.js";
+import { markLocked, type Locked } from "../../domain-writes/locked.js";
 
 export { RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX };
 
@@ -98,6 +99,22 @@ export async function findRideRequestByOwner(
     .where(and(eq(rideRequests.id, id), eq(rideRequests.passengerId, passengerId)))
     .limit(1);
   return row;
+}
+
+// Scoped by owner in the same WHERE as the lookup (CLAUDE.md: "every query
+// on user-owned data is scoped by the caller") — a non-owner's cancel finds
+// no row and gets the same 404 as a ride that doesn't exist.
+export async function lockRideRequestForOwner(
+  tx: Tx,
+  id: string,
+  passengerId: string,
+): Promise<Locked<{ id: string; status: RideStatus }> | undefined> {
+  const [row] = await tx
+    .select({ id: rideRequests.id, status: rideRequests.status })
+    .from(rideRequests)
+    .where(and(eq(rideRequests.id, id), eq(rideRequests.passengerId, passengerId)))
+    .for("update");
+  return row ? markLocked(row) : undefined;
 }
 
 export interface ListRideRequestsParams {

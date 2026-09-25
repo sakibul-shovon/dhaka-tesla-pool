@@ -3,6 +3,7 @@ import { ERROR_CODES } from "@dhaka-tesla-pool/shared";
 import type { Db } from "../../db/client.js";
 import { computeFare } from "../../domain/fare.js";
 import { manhattanDistanceDkm } from "../../domain/geography.js";
+import { applyRideTransition } from "../../domain-writes/ride-transitions.js";
 import { HttpError } from "../../http/error-mapper.js";
 import { authenticate } from "../../http/middleware/authenticate.js";
 import { requireRole } from "../../http/middleware/role-guard.js";
@@ -26,13 +27,15 @@ import {
   insertRideRequest,
   listRideRequestsForPassenger,
   listRideStatusHistory,
+  lockRideRequestForOwner,
   toHistoryDTO,
   toRideRequestDTO,
 } from "./repository.js";
-import { createRideRequestSchema, listRideRequestsQuerySchema } from "./schemas.js";
+import { cancelRideRequestSchema, createRideRequestSchema, listRideRequestsQuerySchema } from "./schemas.js";
 
 const ROUTE = {
   create: "/api/v1/ride-requests",
+  cancel: "/api/v1/ride-requests/:id/cancel",
 } as const;
 
 function validationError(details: Record<string, unknown>): HttpError {
@@ -186,6 +189,49 @@ export function ridesRouter(db: Db): Router {
       }
       const history = await listRideStatusHistory(db, ride.id);
       sendData(res, 200, history.map(toHistoryDTO));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/:id/cancel", requireAuth, requirePassenger, async (req, res, next) => {
+    try {
+      const idempotencyKey = requireIdempotencyKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+      const parsed = cancelRideRequestSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        next(validationError({ fields: parsed.error.flatten().fieldErrors }));
+        return;
+      }
+
+      const passengerId = req.user!.id;
+      const rideRequestId = requireIdParam(req.params.id);
+      const fingerprint = fingerprintRequest("POST", ROUTE.cancel, parsed.data);
+
+      const { replayed, status, body } = await runInTransaction(db, async (tx) => {
+        const claim = await claimIdempotencyKey(tx, passengerId, {
+          key: idempotencyKey,
+          operation: "cancelRideRequest",
+          fingerprint,
+        });
+        if (claim.replayed) {
+          return { replayed: true, status: claim.responseStatus, body: claim.responseBody };
+        }
+
+        const locked = await lockRideRequestForOwner(tx, rideRequestId, passengerId);
+        if (!locked) {
+          throw new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride.");
+        }
+
+        const updated = await applyRideTransition(tx, locked, "cancel", passengerId, parsed.data.reason);
+        const dto = toRideRequestDTO(updated);
+        await finalizeIdempotencyKey(tx, passengerId, idempotencyKey, 200, dto);
+        return { replayed: false, status: 200, body: dto };
+      });
+
+      if (replayed) {
+        res.setHeader(IDEMPOTENT_REPLAYED_HEADER, "true");
+      }
+      sendData(res, status, body);
     } catch (err) {
       next(err);
     }

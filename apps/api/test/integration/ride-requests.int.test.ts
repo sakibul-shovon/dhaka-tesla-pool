@@ -315,3 +315,99 @@ describe("GET /ride-requests (keyset pagination, plan §12.1)", () => {
     expect(cancelled.body.data).toHaveLength(1);
   });
 });
+
+describe("POST /ride-requests/:id/cancel (plan §9.1, §10.7)", () => {
+  it("cancels a REQUESTED ride and frees up the active-ride slot", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+    const created = await createRideRequest(app, cookie);
+
+    const res = await request(app)
+      .post(`/api/v1/ride-requests/${created.body.data.id}/cancel`)
+      .set("Cookie", cookie)
+      .set("Idempotency-Key", randomUUID())
+      .send({ reason: "Changed my mind" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe("CANCELLED");
+    expect(res.body.data.cancelReason).toBe("Changed my mind");
+
+    // The active-ride slot is free again (plan §9.1: only REQUESTED/MATCHED/
+    // DRIVER_ARRIVED/STARTED hold it).
+    const again = await createRideRequest(app, cookie);
+    expect(again.status).toBe(201);
+  });
+
+  it("writes a CANCELLED history row alongside the REQUESTED one", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+    const created = await createRideRequest(app, cookie);
+
+    await request(app)
+      .post(`/api/v1/ride-requests/${created.body.data.id}/cancel`)
+      .set("Cookie", cookie)
+      .set("Idempotency-Key", randomUUID())
+      .send({});
+
+    const res = await request(app)
+      .get(`/api/v1/ride-requests/${created.body.data.id}/history`)
+      .set("Cookie", cookie);
+
+    expect(res.body.data.map((h: { toStatus: string }) => h.toStatus)).toEqual(["REQUESTED", "CANCELLED"]);
+  });
+
+  it("rejects cancelling an already-cancelled ride (409 INVALID_TRANSITION)", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+    const created = await createRideRequest(app, cookie);
+    await request(app)
+      .post(`/api/v1/ride-requests/${created.body.data.id}/cancel`)
+      .set("Cookie", cookie)
+      .set("Idempotency-Key", randomUUID())
+      .send({});
+
+    const res = await request(app)
+      .post(`/api/v1/ride-requests/${created.body.data.id}/cancel`)
+      .set("Cookie", cookie)
+      .set("Idempotency-Key", randomUUID())
+      .send({});
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("INVALID_TRANSITION");
+  });
+
+  it("replays an identical retry with the same Idempotency-Key", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+    const created = await createRideRequest(app, cookie);
+    const key = randomUUID();
+
+    const first = await request(app)
+      .post(`/api/v1/ride-requests/${created.body.data.id}/cancel`)
+      .set("Cookie", cookie)
+      .set("Idempotency-Key", key)
+      .send({});
+    const second = await request(app)
+      .post(`/api/v1/ride-requests/${created.body.data.id}/cancel`)
+      .set("Cookie", cookie)
+      .set("Idempotency-Key", key)
+      .send({});
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.headers["idempotent-replayed"]).toBe("true");
+  });
+
+  it("404s cancelling a ride id that does not exist", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+
+    const res = await request(app)
+      .post(`/api/v1/ride-requests/${randomUUID()}/cancel`)
+      .set("Cookie", cookie)
+      .set("Idempotency-Key", randomUUID())
+      .send({});
+
+    expect(res.status).toBe(404);
+  });
+});

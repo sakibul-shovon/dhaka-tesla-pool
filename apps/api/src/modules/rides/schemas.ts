@@ -27,3 +27,11 @@ export const listRideRequestsQuerySchema = z
   .strict();
 
 export type ListRideRequestsQuery = z.infer<typeof listRideRequestsQuerySchema>;
+
+export const cancelRideRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(500).optional(),
+  })
+  .strict();
+
+export type CancelRideRequestInput = z.infer<typeof cancelRideRequestSchema>;

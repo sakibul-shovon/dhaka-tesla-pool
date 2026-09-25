@@ -52,6 +52,17 @@ async function passengerContext(name = "Nusrat"): Promise<PassengerContext> {
   return { userId, cookie: `${SESSION_COOKIE_NAME}=${token}` };
 }
 
+async function driverContext(name = "Jashim"): Promise<PassengerContext> {
+  const {
+    rows: [row],
+  } = await pool.query<{ id: string }>(
+    `INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, 'x', 'DRIVER') RETURNING id`,
+    [name, `${randomUUID()}@dhakateslapool.test`],
+  );
+  const { token } = await createSession(db, row!.id, 1);
+  return { userId: row!.id, cookie: `${SESSION_COOKIE_NAME}=${token}` };
+}
+
 const NUSRAT_TRIP = { pickupZone: "BANANI", dropoffZone: "MOHAKHALI", seats: 1, paymentMethod: "CASH" as const };
 
 function createRideRequest(
@@ -409,5 +420,75 @@ describe("POST /ride-requests/:id/cancel (plan §9.1, §10.7)", () => {
       .send({});
 
     expect(res.status).toBe(404);
+  });
+});
+
+describe("ownership and role authorization (plan §13.1 BOLA/BFLA, §13.2)", () => {
+  it("404s Rafiq reading Nusrat's ride (not 403 — no existence oracle)", async () => {
+    const app = buildTestApp(pool, logger);
+    const nusrat = await passengerContext("Nusrat");
+    const rafiq = await passengerContext("Rafiq");
+    const nusratsRide = await createRideRequest(app, nusrat.cookie);
+
+    const res = await request(app)
+      .get(`/api/v1/ride-requests/${nusratsRide.body.data.id}`)
+      .set("Cookie", rafiq.cookie);
+
+    expect(res.status).toBe(404);
+  });
+
+  it("404s Rafiq reading Nusrat's ride history", async () => {
+    const app = buildTestApp(pool, logger);
+    const nusrat = await passengerContext("Nusrat");
+    const rafiq = await passengerContext("Rafiq");
+    const nusratsRide = await createRideRequest(app, nusrat.cookie);
+
+    const res = await request(app)
+      .get(`/api/v1/ride-requests/${nusratsRide.body.data.id}/history`)
+      .set("Cookie", rafiq.cookie);
+
+    expect(res.status).toBe(404);
+  });
+
+  it("404s Rafiq cancelling Nusrat's ride, which stays REQUESTED", async () => {
+    const app = buildTestApp(pool, logger);
+    const nusrat = await passengerContext("Nusrat");
+    const rafiq = await passengerContext("Rafiq");
+    const nusratsRide = await createRideRequest(app, nusrat.cookie);
+
+    const res = await request(app)
+      .post(`/api/v1/ride-requests/${nusratsRide.body.data.id}/cancel`)
+      .set("Cookie", rafiq.cookie)
+      .set("Idempotency-Key", randomUUID())
+      .send({});
+
+    expect(res.status).toBe(404);
+
+    const stillThere = await request(app)
+      .get(`/api/v1/ride-requests/${nusratsRide.body.data.id}`)
+      .set("Cookie", nusrat.cookie);
+    expect(stillThere.body.data.status).toBe("REQUESTED");
+  });
+
+  it("403s a driver creating a ride request (BFLA — passenger-only)", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await driverContext();
+
+    const res = await request(app)
+      .post("/api/v1/ride-requests")
+      .set("Cookie", cookie)
+      .set("Idempotency-Key", randomUUID())
+      .send(NUSRAT_TRIP);
+
+    expect(res.status).toBe(403);
+  });
+
+  it("403s a driver listing ride requests", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await driverContext();
+
+    const res = await request(app).get("/api/v1/ride-requests").set("Cookie", cookie);
+
+    expect(res.status).toBe(403);
   });
 });

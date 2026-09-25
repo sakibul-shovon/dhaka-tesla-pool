@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Branch rules, forbidden files, secret shapes and commit size — before a commit exists.
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/git/policy.sh"
+
+branch=$(git symbolic-ref --short -q HEAD || true)
+if [[ -z "$branch" ]]; then
+  red "✖ detached HEAD: commit on a named branch"; exit 1
+fi
+# The very first commit of the repository is the only commit allowed directly on master.
+if git rev-parse --verify -q HEAD >/dev/null; then
+  if [[ "$branch" == "master" || "$branch" =~ ^release/ ]]; then
+    red "✖ '$branch' is only updated by merges. Create feature/<name> from master (or fix/<name>)."
+    exit 1
+  fi
+fi
+if ! [[ "$branch" =~ $BRANCH_PATTERN ]]; then
+  red "✖ branch '$branch' does not follow the branch model (feature/<kebab-name>, fix/<kebab-name>, pre-release)"
+  exit 1
+fi
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+if bad=$(grep -E "$FORBIDDEN_FILES_PATTERN" <<<"$staged"); then
+  red "✖ refusing to commit forbidden file(s):"; note "$bad"
+  note "  .env files, docs/PRD.md and private keys never enter the repository."
+  exit 1
+fi
+
+added=$(git diff --cached -U0 --diff-filter=ACMR -- . \
+  ':(exclude)*.env.example' ':(exclude)scripts/git/*' ':(exclude).githooks/*' \
+  | grep '^+' | grep -v '^+++' || true)
+if hits=$(grep -E -- "$SECRET_PATTERN" <<<"$added" | grep -vE -- "$LOCAL_DB_URL_PATTERN"); then
+  red "✖ possible secret in staged changes:"; note "$(cut -c1-120 <<<"$hits")"
+  note "  Move it to .env (gitignored) and reference it through config."
+  exit 1
+fi
+
+lines=$(git diff --cached --numstat -- . ':(exclude)*package-lock.json' ':(exclude)*migrations/*' \
+  ':(exclude)*.md' ':(exclude)*.snap' | awk '$1 != "-" { s += $1 + $2 } END { print s + 0 }')
+if (( lines > MAX_COMMIT_LINES )); then
+  if [[ "${ALLOW_LARGE_COMMIT:-}" == "1" ]]; then
+    note "⚠ large commit (${lines} lines) allowed by ALLOW_LARGE_COMMIT=1 — mention why in the commit body."
+  else
+    red "✖ this commit changes ${lines} lines (limit ${MAX_COMMIT_LINES}, excluding lockfiles/migrations/Markdown)."
+    note "  Split it into logical commits. If it truly is one change: ALLOW_LARGE_COMMIT=1 git commit ..."
+    exit 1
+  fi
+fi

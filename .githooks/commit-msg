@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Rejects commit messages that break PRD §11. Bypassing with --no-verify is caught again in CI.
+set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/git/policy.sh"
+
+header=$(grep -v '^#' "$1" | sed '/^[[:space:]]*$/d' | head -n1 || true)
+if ! reason=$(validate_commit_message "$header"); then
+  red "✖ commit message rejected: $reason"
+  note "  got:      $header"
+  note "  example:  feat(pool): enforce vehicle seat capacity"
+  exit 1
+fi

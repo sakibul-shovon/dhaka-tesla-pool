@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Blocks history rewrites, protected-branch deletion, direct pushes to master/release,
+# badly named branches/tags, and pushing code that fails `npm run verify`.
+set -euo pipefail
+root=$(git rev-parse --show-toplevel)
+source "$root/scripts/git/policy.sh"
+zero='0000000000000000000000000000000000000000'
+run_verify=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/tags/*)
+      tag=${remote_ref#refs/tags/}
+      if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        red "✖ tag '$tag' must look like v1.0.0"; exit 1
+      fi
+      if [[ "$local_sha" == "$zero" || "$remote_sha" != "$zero" ]]; then
+        red "✖ release tags are never deleted or moved"; exit 1
+      fi
+      continue ;;
+    refs/heads/*) branch=${remote_ref#refs/heads/} ;;
+    *) continue ;;
+  esac
+
+  if [[ "$local_sha" == "$zero" ]]; then
+    if [[ "$branch" =~ $PROTECTED_PATTERN ]]; then
+      red "✖ '$branch' is a long-lived branch and is never deleted"; exit 1
+    fi
+    continue
+  fi
+  if ! [[ "$branch" =~ $BRANCH_PATTERN ]]; then
+    red "✖ branch '$branch' does not follow the branch model"; exit 1
+  fi
+  if [[ "$remote_sha" != "$zero" ]]; then
+    if ! git cat-file -e "$remote_sha" 2>/dev/null; then
+      red "✖ remote '$branch' has commits you don't have. Run: git fetch origin"; exit 1
+    fi
+    if ! git merge-base --is-ancestor "$remote_sha" "$local_sha"; then
+      red "✖ non-fast-forward push to '$branch' would rewrite published history"; exit 1
+    fi
+    if [[ "$branch" == "master" || "$branch" =~ ^release/ ]]; then
+      red "✖ '$branch' changes only through a merged pull request (or, for release/*, never after the cut)"
+      exit 1
+    fi
+  fi
+  run_verify=1
+done
+
+if (( run_verify )) && [[ -f "$root/package.json" && -d "$root/node_modules" ]]; then
+  note "→ npm run verify (lint, typecheck, unit tests) before push"
+  (cd "$root" && npm run --silent --if-present verify) || { red "✖ verify failed — not pushing"; exit 1; }
+fi

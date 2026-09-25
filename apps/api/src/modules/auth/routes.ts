@@ -4,6 +4,7 @@ import type { Db } from "../../db/client.js";
 import { HttpError } from "../../http/error-mapper.js";
 import { sendData } from "../../http/response.js";
 import { authenticate } from "../../http/middleware/authenticate.js";
+import { loginPerIpEmailLimiter, loginPerIpLimiter, registerPerIpLimiter } from "../../http/middleware/rate-limit.js";
 import { hashPassword, verifyPassword } from "./password-service.js";
 import { createPassengerUser, findUserByEmail, type UserRow } from "./repository.js";
 import { loginSchema, registerSchema } from "./schemas.js";
@@ -32,7 +33,7 @@ export function authRouter({ db, sessionTtlHours, cookieSecure }: AuthRouterDeps
   const router = Router();
   const requireAuth = authenticate(db);
 
-  router.post("/register", async (req, res, next) => {
+  router.post("/register", registerPerIpLimiter, async (req, res, next) => {
     try {
       const parsed = registerSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -56,7 +57,7 @@ export function authRouter({ db, sessionTtlHours, cookieSecure }: AuthRouterDeps
     }
   });
 
-  router.post("/login", async (req, res, next) => {
+  router.post("/login", loginPerIpLimiter, loginPerIpEmailLimiter, async (req, res, next) => {
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) {

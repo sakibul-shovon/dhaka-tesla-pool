@@ -9,6 +9,7 @@ import { ERROR_CODES } from "@dhaka-tesla-pool/shared";
 import { errorMapper } from "./http/error-mapper.js";
 import { healthRouter } from "./modules/health/routes.js";
 import { authRouter } from "./modules/auth/routes.js";
+import { originGuard } from "./http/middleware/origin-guard.js";
 import { createDb } from "./db/client.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -19,13 +20,24 @@ export interface AppDeps {
   logger: pino.Logger;
   sessionTtlHours: number;
   cookieSecure: boolean;
+  webOrigin?: string;
+  trustProxy?: number;
 }
 
 // No listen() here — kept separate from server.ts so tests can build and
 // exercise the app without binding a port (plan §4.3).
-export function buildApp({ pool, logger, sessionTtlHours, cookieSecure }: AppDeps): Express {
+export function buildApp({
+  pool,
+  logger,
+  sessionTtlHours,
+  cookieSecure,
+  webOrigin = "http://localhost:5173",
+  trustProxy = 0,
+}: AppDeps): Express {
   const app = express();
   const db = createDb(pool);
+
+  app.set("trust proxy", trustProxy);
 
   app.disable("x-powered-by");
   app.disable("etag");
@@ -51,6 +63,8 @@ export function buildApp({ pool, logger, sessionTtlHours, cookieSecure }: AppDep
     res.setHeader("Cache-Control", "no-store");
     next();
   });
+
+  app.use(originGuard([webOrigin]));
 
   app.use((req, res, next) => {
     const hasBody = req.headers["content-length"] && req.headers["content-length"] !== "0";

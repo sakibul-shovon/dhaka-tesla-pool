@@ -11,6 +11,7 @@ import { healthRouter } from "./modules/health/routes.js";
 import { authRouter } from "./modules/auth/routes.js";
 import { zonesRouter } from "./modules/zones/routes.js";
 import { faresRouter } from "./modules/fares/routes.js";
+import { ridesRouter } from "./modules/rides/routes.js";
 import { originGuard } from "./http/middleware/origin-guard.js";
 import { createDb } from "./db/client.js";
 
@@ -90,6 +91,7 @@ export function buildApp({
   app.use("/api/v1/auth", authRouter({ db, sessionTtlHours, cookieSecure }));
   app.use("/api/v1/zones", zonesRouter(db));
   app.use("/api/v1/fare-quotes", faresRouter(db));
+  app.use("/api/v1/ride-requests", ridesRouter(db));
 
   app.use((req, res) => {
     res.status(404).json({

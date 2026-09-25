@@ -41,6 +41,10 @@ const TRANSITION_TABLE: Record<PoolStatus, Partial<Record<PoolCommand, PoolStatu
   CANCELLED: {},
 };
 
+// Matches the predicate on the `pools_active_per_vehicle` partial unique
+// index exactly (plan §5.2) — one row of truth for "not terminal".
+export const ACTIVE_POOL_STATUSES: readonly PoolStatus[] = ["OPEN", "DRIVER_ARRIVED", "STARTED"];
+
 export function poolTransition(current: PoolStatus, command: PoolCommand): PoolTransitionResult {
   const entry = TRANSITION_TABLE[current][command];
   if (entry === undefined || !isPoolStatus(entry)) {

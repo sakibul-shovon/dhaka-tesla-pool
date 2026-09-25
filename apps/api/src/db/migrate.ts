@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "../lib/load-env.js";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";

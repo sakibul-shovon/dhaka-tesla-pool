@@ -1,3 +1,4 @@
+import "../../src/lib/load-env.js";
 import { Pool } from "pg";
 
 export function testDatabaseUrl(): string {

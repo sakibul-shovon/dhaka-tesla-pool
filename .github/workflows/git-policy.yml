@@ -1,0 +1,43 @@
+# Server-side half of the Git policy (local hooks are the fast, bypassable half).
+# Required status check "git-policy" in the master ruleset — see docs/GIT_WORKFLOW.md.
+name: git-policy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [master, pre-release, 'release/**']
+
+permissions:
+  contents: read
+
+jobs:
+  git-policy:
+    name: git-policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Branch names are attacker-controllable in PRs: pass them through env, never inline ${{ }} in run.
+      - name: Pull request branch, commit, file and secret rules
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+          BASE_BRANCH: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/git/check-pr.sh "$HEAD_BRANCH" "$BASE_BRANCH" "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Commit messages on pushed long-lived branches
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            bash scripts/git/lint-commits.sh "$AFTER^!"
+          else
+            bash scripts/git/lint-commits.sh "$BEFORE..$AFTER"
+          fi

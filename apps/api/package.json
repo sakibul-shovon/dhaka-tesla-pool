@@ -16,9 +16,11 @@
   "dependencies": {
     "@dhaka-tesla-pool/shared": "*",
     "@node-rs/argon2": "^2.2.1",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^16.6.1",
     "drizzle-orm": "^0.36.4",
     "express": "^5.0.1",
+    "express-rate-limit": "^8.7.0",
     "helmet": "^8.0.0",
     "pg": "^8.13.0",
     "pino": "^9.4.0",
@@ -26,6 +28,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/node": "^22.7.5",
     "@types/pg": "^8.11.10",

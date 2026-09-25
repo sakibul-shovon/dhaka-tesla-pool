@@ -16,7 +16,14 @@ try {
 
 const logger = createLogger(env);
 const pool = createPool(env.DATABASE_URL);
-const app = buildApp({ pool, logger });
+const app = buildApp({
+  pool,
+  logger,
+  sessionTtlHours: env.SESSION_TTL_HOURS,
+  cookieSecure: env.COOKIE_SECURE,
+  webOrigin: env.WEB_ORIGIN,
+  trustProxy: env.TRUST_PROXY,
+});
 
 const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, "api listening");

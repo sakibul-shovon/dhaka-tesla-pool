@@ -29,6 +29,13 @@
       "when": 1790349859170,
       "tag": "0003_history_immutability_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790349897440,
+      "tag": "0004_seed_zones",
+      "breakpoints": true
     }
   ]
 }

@@ -13,6 +13,27 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-dtp}:${POSTGRES_PASSWORD:-dtp}@db:5432/${POSTGRES_DB:-dtp}
+      SEED_DEMO: ${SEED_DEMO:-true}
+      ALLOW_DEMO_SEED: ${ALLOW_DEMO_SEED:-true}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-dhaka-tesla-demo}
+    command:
+      [
+        "sh",
+        "-c",
+        "node apps/api/dist/db/migrate.js && ( [ \"$SEED_DEMO\" = \"true\" ] && node apps/api/dist/db/seed/index.js || echo skipping seed )",
+      ]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: .
@@ -27,6 +48,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [

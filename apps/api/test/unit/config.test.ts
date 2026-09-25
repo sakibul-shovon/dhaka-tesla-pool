@@ -19,5 +19,17 @@ describe("parseEnv", () => {
     expect(env.NODE_ENV).toBe("development");
     expect(env.PORT).toBe(4000);
     expect(env.LOG_LEVEL).toBe("info");
+    expect(env.SESSION_TTL_HOURS).toBe(168);
+    expect(env.COOKIE_SECURE).toBe(false);
+    expect(env.TRUST_PROXY).toBe(0);
+  });
+
+  it("parses COOKIE_SECURE=true as a real boolean, not Boolean(string)", () => {
+    expect(parseEnv({ DATABASE_URL: "postgres://x", COOKIE_SECURE: "true" }).COOKIE_SECURE).toBe(true);
+    expect(parseEnv({ DATABASE_URL: "postgres://x", COOKIE_SECURE: "false" }).COOKIE_SECURE).toBe(false);
+  });
+
+  it("throws when COOKIE_SECURE is not exactly 'true' or 'false'", () => {
+    expect(() => parseEnv({ DATABASE_URL: "postgres://x", COOKIE_SECURE: "yes" })).toThrow(EnvValidationError);
   });
 });

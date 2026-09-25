@@ -1,0 +1,20 @@
+{
+  "name": "dhaka-tesla-pool",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
+    "build": "npm run build --workspace=packages/shared && npm run build --workspace=apps/api"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

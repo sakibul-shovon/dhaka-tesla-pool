@@ -63,11 +63,17 @@ plus any section you are about to implement.
 - `npm run lint` · `npm run typecheck` · `npm test` (each also runs per-workspace via `--workspaces`)
 - `npm run build` — builds `packages/shared` then `apps/api`
 - `npm run dev --workspace=apps/api` — run the API with reload (`tsx watch`)
-- `docker compose up --build` — db (Postgres 17, health-checked) + api (build, health-checked on `/readyz`)
+- `docker compose up --build` — db (health-checked) + migrate (one-shot: migrations, then seed if
+  `SEED_DEMO=true`) + api (health-checked on `/readyz`)
+- `npm run db:generate --workspace=apps/api` — regenerate SQL migrations after editing `src/db/schema.ts`
+- `npm run db:migrate --workspace=apps/api` / `npm run db:seed --workspace=apps/api` — needs `DATABASE_URL`
+  (`db:seed` also needs `DEMO_PASSWORD`, and refuses in production without `ALLOW_DEMO_SEED=true`)
 - `cp .env.example .env` before running the API outside Docker
+- Integration tests need a real Postgres reachable at `DATABASE_URL`; a global Vitest setup runs
+  migrations once before the suite (`apps/api/test/support/global-setup.ts`)
 
-Not yet added (land with the sessions that need them): `db:migrate`, `db:seed`, `db:reset`
-(`feature/database-schema`), `test:e2e` (`feature/web-driver` or later).
+Not yet added (land with the sessions that need them): `db:reset`, `test:e2e` (`feature/web-driver` or
+later).
 
 ## End-of-session report (always)
 

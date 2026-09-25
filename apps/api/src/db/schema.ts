@@ -20,6 +20,22 @@ import {
 
 export const userRoleEnum = pgEnum("user_role", ["PASSENGER", "DRIVER"]);
 export const accountStatusEnum = pgEnum("account_status", ["ACTIVE", "SUSPENDED"]);
+export const paymentMethodEnum = pgEnum("payment_method", ["CASH", "TESLAPAY"]);
+export const rideStatusEnum = pgEnum("ride_status", [
+  "REQUESTED",
+  "MATCHED",
+  "DRIVER_ARRIVED",
+  "STARTED",
+  "COMPLETED",
+  "CANCELLED",
+]);
+export const poolStatusEnum = pgEnum("pool_status", [
+  "OPEN",
+  "DRIVER_ARRIVED",
+  "STARTED",
+  "COMPLETED",
+  "CANCELLED",
+]);
 
 // Reference data: the 10-zone grid (§7.1) — rows inserted by a migration, not the app seed.
 export const zones = pgTable("zones", {
@@ -78,6 +94,124 @@ export const vehicles = pgTable(
     check(
       "vehicles_online_requires_zone",
       sql`(NOT ${table.isOnline}) OR ${table.currentZone} IS NOT NULL`,
+    ),
+  ],
+);
+
+export const rideRequests = pgTable(
+  "ride_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    passengerId: uuid("passenger_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    pickupZone: text("pickup_zone")
+      .notNull()
+      .references(() => zones.code, { onDelete: "restrict" }),
+    dropoffZone: text("dropoff_zone")
+      .notNull()
+      .references(() => zones.code, { onDelete: "restrict" }),
+    seats: smallint("seats").notNull(),
+    distanceDkm: integer("distance_dkm").notNull(),
+    soloFarePaisa: integer("solo_fare_paisa").notNull(),
+    pooledFarePaisa: integer("pooled_fare_paisa").notNull(),
+    paymentMethod: paymentMethodEnum("payment_method").notNull(),
+    status: rideStatusEnum("status").notNull().default("REQUESTED"),
+    cancelReason: text("cancel_reason"),
+    cancelledBy: uuid("cancelled_by").references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    matchedAt: timestamp("matched_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("ride_requests_active_per_passenger")
+      .on(table.passengerId)
+      .where(sql`${table.status} IN ('REQUESTED','MATCHED','DRIVER_ARRIVED','STARTED')`),
+    index("ride_requests_passenger_history").on(
+      table.passengerId,
+      table.createdAt.desc(),
+      table.id.desc(),
+    ),
+    index("ride_requests_pickup_open")
+      .on(table.pickupZone, table.createdAt)
+      .where(sql`${table.status} = 'REQUESTED'`),
+    check("ride_requests_seats_range", sql`${table.seats} BETWEEN 1 AND 6`),
+    check("ride_requests_distance_positive", sql`${table.distanceDkm} > 0`),
+    check("ride_requests_solo_fare_nonneg", sql`${table.soloFarePaisa} >= 0`),
+    check(
+      "ride_requests_pooled_fare_range",
+      sql`${table.pooledFarePaisa} BETWEEN 0 AND ${table.soloFarePaisa}`,
+    ),
+    check("ride_requests_pickup_ne_dropoff", sql`${table.pickupZone} <> ${table.dropoffZone}`),
+  ],
+);
+
+export const pools = pgTable(
+  "pools",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    vehicleId: uuid("vehicle_id")
+      .notNull()
+      .references(() => vehicles.id, { onDelete: "restrict" }),
+    driverId: uuid("driver_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    pickupZone: text("pickup_zone")
+      .notNull()
+      .references(() => zones.code, { onDelete: "restrict" }),
+    status: poolStatusEnum("status").notNull().default("OPEN"),
+    capacitySnapshot: smallint("capacity_snapshot").notNull(),
+    seatsReserved: smallint("seats_reserved").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    arrivedAt: timestamp("arrived_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("pools_active_per_vehicle")
+      .on(table.vehicleId)
+      .where(sql`${table.status} IN ('OPEN','DRIVER_ARRIVED','STARTED')`),
+    index("pools_open_by_pickup_zone")
+      .on(table.pickupZone)
+      .where(sql`${table.status} = 'OPEN'`),
+    index("pools_driver_history").on(table.driverId, table.createdAt.desc(), table.id.desc()),
+    check("pools_capacity_positive", sql`${table.capacitySnapshot} > 0`),
+    check(
+      "pools_seats_within_capacity",
+      sql`${table.seatsReserved} BETWEEN 0 AND ${table.capacitySnapshot}`,
+    ),
+  ],
+);
+
+export const poolMemberships = pgTable(
+  "pool_memberships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    poolId: uuid("pool_id")
+      .notNull()
+      .references(() => pools.id, { onDelete: "restrict" }),
+    rideRequestId: uuid("ride_request_id")
+      .notNull()
+      .references(() => rideRequests.id, { onDelete: "restrict" }),
+    seats: smallint("seats").notNull(),
+    finalFarePaisa: integer("final_fare_paisa"),
+    sharedRide: boolean("shared_ride"),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    droppedOffAt: timestamp("dropped_off_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("pool_memberships_ride_request_unique").on(table.rideRequestId),
+    index("pool_memberships_active_by_pool")
+      .on(table.poolId)
+      .where(sql`${table.releasedAt} IS NULL`),
+    check("pool_memberships_seats_positive", sql`${table.seats} > 0`),
+    check(
+      "pool_memberships_final_fare_nonneg",
+      sql`${table.finalFarePaisa} IS NULL OR ${table.finalFarePaisa} >= 0`,
     ),
   ],
 );

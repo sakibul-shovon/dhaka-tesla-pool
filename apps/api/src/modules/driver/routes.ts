@@ -5,8 +5,27 @@ import { HttpError } from "../../http/error-mapper.js";
 import { authenticate } from "../../http/middleware/authenticate.js";
 import { requireRole } from "../../http/middleware/role-guard.js";
 import { sendData } from "../../http/response.js";
+import {
+  claimIdempotencyKey,
+  finalizeIdempotencyKey,
+  fingerprintRequest,
+  IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENT_REPLAYED_HEADER,
+  requireIdempotencyKey,
+} from "../../lib/idempotency.js";
+import { isUniqueViolation } from "../../lib/pg-errors.js";
 import { runInTransaction } from "../../lib/transaction.js";
-import { createLockOrderGuard, lockVehicleByDriverId } from "../../lib/lock-order.js";
+import { createLockOrderGuard, lockRideRequestsByIds, lockVehicleByDriverId } from "../../lib/lock-order.js";
+import { markLocked } from "../../domain-writes/locked.js";
+import {
+  findOpenPoolForVehicle,
+  findPoolByIdForDriver,
+  insertPool,
+  listUnreleasedMembers,
+  lockPoolForDriver,
+  toPoolDTO,
+} from "../pools/repository.js";
+import { reserveSeat } from "../pools/seat-reservation.js";
 import {
   findActivePoolForVehicle,
   findVehicleByDriverId,
@@ -17,6 +36,21 @@ import {
   type VehicleRow,
 } from "./repository.js";
 import { goOnlineSchema } from "./schemas.js";
+
+const ROUTE = {
+  accept: "/api/v1/driver/requests/:id/accept",
+} as const;
+
+// Express 5 types every param as `string | string[]` (path-to-regexp v8
+// allows repeated segments); none of our routes do that, so a non-string
+// here means the path genuinely didn't match — same 404 a missing row gets
+// (mirrors modules/rides/routes.ts's requireIdParam).
+function requireIdParam(value: string | string[] | undefined): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride.");
+  }
+  return value;
+}
 
 function noVehicleError(): HttpError {
   return new HttpError(404, ERROR_CODES.NOT_FOUND, "No Tesla is registered for this driver.");
@@ -148,6 +182,94 @@ export function driverRouter(db: Db): Router {
 
       const relevant = await listRelevantRequestsForDriver(db, vehicle.currentZone, openPool);
       sendData(res, 200, relevant.map(toRequestSummaryDTO));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Creates the driver's pool on the first accept, extends it on later ones
+  // (plan §10.4's acceptRideRequest script) — always under the vehicle lock,
+  // which is what actually serializes two accepts from the same driver.
+  router.post("/requests/:id/accept", requireAuth, requireDriver, async (req, res, next) => {
+    try {
+      const idempotencyKey = requireIdempotencyKey(req.headers[IDEMPOTENCY_KEY_HEADER]);
+      const rideRequestId = requireIdParam(req.params.id);
+      const driverId = req.user!.id;
+      const fingerprint = fingerprintRequest("POST", ROUTE.accept, {});
+
+      const { replayed, status, body } = await runInTransaction(db, async (tx) => {
+        const claim = await claimIdempotencyKey(tx, driverId, {
+          key: idempotencyKey,
+          operation: "acceptRideRequest",
+          fingerprint,
+        });
+        if (claim.replayed) {
+          return { replayed: true, status: claim.responseStatus, body: claim.responseBody };
+        }
+
+        const guard = createLockOrderGuard();
+        const lockedVehicle = await lockVehicleByDriverId(tx, driverId, guard);
+        if (!lockedVehicle) {
+          throw noVehicleError();
+        }
+        if (!lockedVehicle.isOnline || !lockedVehicle.currentZone) {
+          throw new HttpError(409, ERROR_CODES.DRIVER_OFFLINE, "Go online before accepting a ride.");
+        }
+
+        const existingOpen = await findOpenPoolForVehicle(tx, lockedVehicle.id);
+        const lockedPool = existingOpen
+          ? await lockPoolForDriver(tx, existingOpen.id, driverId, guard)
+          : await (async () => {
+              guard.assert("pool");
+              try {
+                const created = await insertPool(tx, {
+                  vehicleId: lockedVehicle.id,
+                  driverId,
+                  pickupZone: lockedVehicle.currentZone!,
+                  capacitySnapshot: lockedVehicle.capacity,
+                });
+                return markLocked(created);
+              } catch (err) {
+                if (isUniqueViolation(err, "pools_active_per_vehicle")) {
+                  throw new HttpError(409, ERROR_CODES.POOL_NOT_ACCEPTING, "This Tesla is no longer taking passengers.");
+                }
+                throw err;
+              }
+            })();
+        if (!lockedPool) {
+          throw new HttpError(409, ERROR_CODES.POOL_NOT_ACCEPTING, "This Tesla is no longer taking passengers.");
+        }
+
+        const [lockedRequest] = await lockRideRequestsByIds(tx, [rideRequestId], guard);
+        if (!lockedRequest) {
+          throw new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride.");
+        }
+        if (lockedRequest.pickupZone !== lockedVehicle.currentZone) {
+          throw new HttpError(409, ERROR_CODES.ZONE_MISMATCH, "That request isn't in your current zone.");
+        }
+
+        const existingMembers = await listUnreleasedMembers(tx, lockedPool.id);
+        const { membershipId } = await reserveSeat(tx, {
+          lockedPool,
+          lockedRequest,
+          members: existingMembers.map((m) => ({ dropoffZone: m.dropoffZone })),
+          command: "accept",
+          actorUserId: driverId,
+        });
+
+        // A plain read-back for the response, not a lock: the mutation
+        // already happened under the lock above; re-locking here would
+        // violate the guard (we've since locked the later "requests" stage).
+        const freshPool = await findPoolByIdForDriver(tx, lockedPool.id, driverId);
+        const dto = { pool: toPoolDTO(freshPool!), membershipId };
+        await finalizeIdempotencyKey(tx, driverId, idempotencyKey, 200, dto);
+        return { replayed: false, status: 200, body: dto };
+      });
+
+      if (replayed) {
+        res.setHeader(IDEMPOTENT_REPLAYED_HEADER, "true");
+      }
+      sendData(res, status, body);
     } catch (err) {
       next(err);
     }

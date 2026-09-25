@@ -213,3 +213,105 @@ describe("GET /ride-requests/:id and /:id/history (plan §12.2)", () => {
     expect(res.status).toBe(404);
   });
 });
+
+// Seeds rows directly with explicit, spaced-out `created_at` values so
+// ordering in the pagination tests is deterministic, and so more than one
+// row can exist for a passenger without going through the (not yet built)
+// cancel endpoint or violating the one-active-ride rule.
+async function seedRideRequest(passengerId: string, status: string, createdAt: Date): Promise<string> {
+  const { rows } = await pool.query<{ id: string }>(
+    `INSERT INTO ride_requests
+       (passenger_id, pickup_zone, dropoff_zone, seats, distance_dkm, solo_fare_paisa, pooled_fare_paisa, payment_method, status, created_at)
+     VALUES ($1, 'BANANI', 'MOHAKHALI', 1, 25, 6750, 5400, 'CASH', $2, $3) RETURNING id`,
+    [passengerId, status, createdAt],
+  );
+  return rows[0]!.id;
+}
+
+describe("GET /ride-requests (keyset pagination, plan §12.1)", () => {
+  it("lists only the caller's own requests, newest first", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+    await createRideRequest(app, cookie);
+
+    const res = await request(app).get("/api/v1/ride-requests").set("Cookie", cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.page).toEqual({ limit: 20, nextCursor: null });
+  });
+
+  it("does not list another passenger's requests", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+    const other = await passengerContext("Rafiq");
+    await createRideRequest(app, other.cookie);
+
+    const res = await request(app).get("/api/v1/ride-requests").set("Cookie", cookie);
+
+    expect(res.body.data).toHaveLength(0);
+  });
+
+  it("pages through results with a cursor, most recent first", async () => {
+    const app = buildTestApp(pool, logger);
+    const { userId, cookie } = await passengerContext();
+    const base = new Date("2026-01-01T00:00:00Z").getTime();
+    const ids = [
+      await seedRideRequest(userId, "CANCELLED", new Date(base)),
+      await seedRideRequest(userId, "CANCELLED", new Date(base + 1000)),
+      await seedRideRequest(userId, "CANCELLED", new Date(base + 2000)),
+    ];
+
+    const firstPage = await request(app).get("/api/v1/ride-requests?limit=2").set("Cookie", cookie);
+    expect(firstPage.body.data).toHaveLength(2);
+    expect(firstPage.body.data.map((r: { id: string }) => r.id)).toEqual([ids[2], ids[1]]);
+    expect(firstPage.body.page.nextCursor).not.toBeNull();
+
+    const secondPage = await request(app)
+      .get(`/api/v1/ride-requests?limit=2&cursor=${firstPage.body.page.nextCursor}`)
+      .set("Cookie", cookie);
+    expect(secondPage.body.data).toHaveLength(1);
+    expect(secondPage.body.data[0].id).toBe(ids[0]);
+    expect(secondPage.body.page.nextCursor).toBeNull();
+  });
+
+  it("rejects a limit above 50 instead of clamping it", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+
+    const res = await request(app).get("/api/v1/ride-requests?limit=51").set("Cookie", cookie);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects a limit of zero", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+
+    const res = await request(app).get("/api/v1/ride-requests?limit=0").set("Cookie", cookie);
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a malformed cursor", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+
+    const res = await request(app).get("/api/v1/ride-requests?cursor=not-base64url-json").set("Cookie", cookie);
+
+    expect(res.status).toBe(400);
+  });
+
+  it("filters by status", async () => {
+    const app = buildTestApp(pool, logger);
+    const { userId, cookie } = await passengerContext();
+    await seedRideRequest(userId, "CANCELLED", new Date());
+
+    const requested = await request(app).get("/api/v1/ride-requests?status=REQUESTED").set("Cookie", cookie);
+    const cancelled = await request(app).get("/api/v1/ride-requests?status=CANCELLED").set("Cookie", cookie);
+
+    expect(requested.body.data).toHaveLength(0);
+    expect(cancelled.body.data).toHaveLength(1);
+  });
+});

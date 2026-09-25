@@ -6,7 +6,8 @@ import { manhattanDistanceDkm } from "../../domain/geography.js";
 import { HttpError } from "../../http/error-mapper.js";
 import { authenticate } from "../../http/middleware/authenticate.js";
 import { requireRole } from "../../http/middleware/role-guard.js";
-import { sendData } from "../../http/response.js";
+import { decodeCursor, encodeCursor } from "../../http/pagination.js";
+import { sendData, sendPage } from "../../http/response.js";
 import {
   claimIdempotencyKey,
   finalizeIdempotencyKey,
@@ -23,11 +24,12 @@ import {
   findRideRequestByOwner,
   insertCreationHistory,
   insertRideRequest,
+  listRideRequestsForPassenger,
   listRideStatusHistory,
   toHistoryDTO,
   toRideRequestDTO,
 } from "./repository.js";
-import { createRideRequestSchema } from "./schemas.js";
+import { createRideRequestSchema, listRideRequestsQuerySchema } from "./schemas.js";
 
 const ROUTE = {
   create: "/api/v1/ride-requests",
@@ -120,6 +122,43 @@ export function ridesRouter(db: Db): Router {
         res.setHeader(IDEMPOTENT_REPLAYED_HEADER, "true");
       }
       sendData(res, status, body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/", requireAuth, requirePassenger, async (req, res, next) => {
+    try {
+      const parsed = listRideRequestsQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        next(validationError({ fields: parsed.error.flatten().fieldErrors }));
+        return;
+      }
+      const { status, cursor, limit } = parsed.data;
+
+      let decodedCursor: { createdAt: Date; id: string } | undefined;
+      if (cursor) {
+        const raw = decodeCursor(cursor);
+        if (!raw) {
+          next(validationError({ fields: { cursor: ["Malformed cursor."] } }));
+          return;
+        }
+        decodedCursor = { createdAt: new Date(raw.createdAt), id: raw.id };
+      }
+
+      const rows = await listRideRequestsForPassenger(db, {
+        passengerId: req.user!.id,
+        limit,
+        ...(status ? { status } : {}),
+        ...(decodedCursor ? { cursor: decodedCursor } : {}),
+      });
+
+      const hasMore = rows.length > limit;
+      const page = rows.slice(0, limit);
+      const last = page[page.length - 1];
+      const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
+
+      sendPage(res, page.map(toRideRequestDTO), { limit, nextCursor });
     } catch (err) {
       next(err);
     }

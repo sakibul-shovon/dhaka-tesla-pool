@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client.js";
 import { RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX, rideRequests, rideStatusHistory } from "../../db/schema.js";
 import { ACTIVE_RIDE_STATUSES, type RideStatus } from "../../domain/ride-state-machine.js";
@@ -98,6 +98,40 @@ export async function findRideRequestByOwner(
     .where(and(eq(rideRequests.id, id), eq(rideRequests.passengerId, passengerId)))
     .limit(1);
   return row;
+}
+
+export interface ListRideRequestsParams {
+  passengerId: string;
+  status?: RideStatus;
+  cursor?: { createdAt: Date; id: string };
+  limit: number;
+}
+
+// `limit + 1` rows are fetched so the caller can tell "there is a next page"
+// without a separate COUNT query — plan §12.1 keyset pagination.
+export async function listRideRequestsForPassenger(
+  db: Db,
+  params: ListRideRequestsParams,
+): Promise<RideRequestRow[]> {
+  const conditions = [eq(rideRequests.passengerId, params.passengerId)];
+  if (params.status) {
+    conditions.push(eq(rideRequests.status, params.status));
+  }
+  if (params.cursor) {
+    conditions.push(
+      or(
+        lt(rideRequests.createdAt, params.cursor.createdAt),
+        and(eq(rideRequests.createdAt, params.cursor.createdAt), lt(rideRequests.id, params.cursor.id))!,
+      )!,
+    );
+  }
+
+  return db
+    .select(RIDE_REQUEST_COLUMNS)
+    .from(rideRequests)
+    .where(and(...conditions))
+    .orderBy(desc(rideRequests.createdAt), desc(rideRequests.id))
+    .limit(params.limit + 1);
 }
 
 export interface RideStatusHistoryRow {

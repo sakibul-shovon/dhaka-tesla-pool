@@ -1,9 +1,31 @@
-import { and, eq, inArray } from "drizzle-orm";
-import type { Tx } from "../../db/client.js";
+import { and, asc, eq, inArray } from "drizzle-orm";
+import type { Db, Tx } from "../../db/client.js";
 import { RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX, rideRequests, rideStatusHistory } from "../../db/schema.js";
-import { ACTIVE_RIDE_STATUSES } from "../../domain/ride-state-machine.js";
+import { ACTIVE_RIDE_STATUSES, type RideStatus } from "../../domain/ride-state-machine.js";
 
 export { RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX };
+
+// Explicit column list, not `select *` (plan §13.1 API3 mass-assignment
+// defence, matching the auth repository's precedent).
+const RIDE_REQUEST_COLUMNS = {
+  id: rideRequests.id,
+  passengerId: rideRequests.passengerId,
+  pickupZone: rideRequests.pickupZone,
+  dropoffZone: rideRequests.dropoffZone,
+  seats: rideRequests.seats,
+  distanceDkm: rideRequests.distanceDkm,
+  soloFarePaisa: rideRequests.soloFarePaisa,
+  pooledFarePaisa: rideRequests.pooledFarePaisa,
+  paymentMethod: rideRequests.paymentMethod,
+  status: rideRequests.status,
+  cancelReason: rideRequests.cancelReason,
+  cancelledBy: rideRequests.cancelledBy,
+  createdAt: rideRequests.createdAt,
+  matchedAt: rideRequests.matchedAt,
+  startedAt: rideRequests.startedAt,
+  completedAt: rideRequests.completedAt,
+  cancelledAt: rideRequests.cancelledAt,
+} as const;
 
 export type RideRequestRow = typeof rideRequests.$inferSelect;
 
@@ -63,4 +85,52 @@ export async function insertCreationHistory(tx: Tx, rideRequestId: string, actor
     toStatus: "REQUESTED",
     actorUserId,
   });
+}
+
+export async function findRideRequestByOwner(
+  db: Db | Tx,
+  id: string,
+  passengerId: string,
+): Promise<RideRequestRow | undefined> {
+  const [row] = await db
+    .select(RIDE_REQUEST_COLUMNS)
+    .from(rideRequests)
+    .where(and(eq(rideRequests.id, id), eq(rideRequests.passengerId, passengerId)))
+    .limit(1);
+  return row;
+}
+
+export interface RideStatusHistoryRow {
+  id: number;
+  fromStatus: RideStatus | null;
+  toStatus: RideStatus;
+  actorUserId: string | null;
+  reason: string | null;
+  createdAt: Date;
+}
+
+export async function listRideStatusHistory(db: Db, rideRequestId: string): Promise<RideStatusHistoryRow[]> {
+  return db
+    .select({
+      id: rideStatusHistory.id,
+      fromStatus: rideStatusHistory.fromStatus,
+      toStatus: rideStatusHistory.toStatus,
+      actorUserId: rideStatusHistory.actorUserId,
+      reason: rideStatusHistory.reason,
+      createdAt: rideStatusHistory.createdAt,
+    })
+    .from(rideStatusHistory)
+    .where(eq(rideStatusHistory.rideRequestId, rideRequestId))
+    .orderBy(asc(rideStatusHistory.createdAt), asc(rideStatusHistory.id));
+}
+
+export function toHistoryDTO(row: RideStatusHistoryRow) {
+  return {
+    id: row.id,
+    fromStatus: row.fromStatus,
+    toStatus: row.toStatus,
+    actorUserId: row.actorUserId,
+    reason: row.reason,
+    createdAt: row.createdAt.toISOString(),
+  };
 }

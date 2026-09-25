@@ -20,8 +20,11 @@ import { runInTransaction } from "../../lib/transaction.js";
 import {
   RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX,
   findActiveRideRequestId,
+  findRideRequestByOwner,
   insertCreationHistory,
   insertRideRequest,
+  listRideStatusHistory,
+  toHistoryDTO,
   toRideRequestDTO,
 } from "./repository.js";
 import { createRideRequestSchema } from "./schemas.js";
@@ -38,6 +41,17 @@ function activeRideExistsError(rideRequestId: string | undefined): HttpError {
   return new HttpError(409, ERROR_CODES.ACTIVE_RIDE_EXISTS, "You already have a ride in progress.", {
     rideRequestId,
   });
+}
+
+// Express 5's ParamsDictionary types every param as `string | string[]`
+// (path-to-regexp v8 allows repeated segments); none of our routes do that,
+// so a non-string here means the path genuinely didn't match — same 404 a
+// missing ride gets, no existence oracle either way.
+function requireIdParam(value: string | string[] | undefined): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride.");
+  }
+  return value;
 }
 
 export function ridesRouter(db: Db): Router {
@@ -106,6 +120,33 @@ export function ridesRouter(db: Db): Router {
         res.setHeader(IDEMPOTENT_REPLAYED_HEADER, "true");
       }
       sendData(res, status, body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/:id", requireAuth, requirePassenger, async (req, res, next) => {
+    try {
+      const ride = await findRideRequestByOwner(db, requireIdParam(req.params.id), req.user!.id);
+      if (!ride) {
+        next(new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride."));
+        return;
+      }
+      sendData(res, 200, toRideRequestDTO(ride));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/:id/history", requireAuth, requirePassenger, async (req, res, next) => {
+    try {
+      const ride = await findRideRequestByOwner(db, requireIdParam(req.params.id), req.user!.id);
+      if (!ride) {
+        next(new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride."));
+        return;
+      }
+      const history = await listRideStatusHistory(db, ride.id);
+      sendData(res, 200, history.map(toHistoryDTO));
     } catch (err) {
       next(err);
     }

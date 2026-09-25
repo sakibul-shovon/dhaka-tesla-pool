@@ -13,6 +13,7 @@ import { zonesRouter } from "./modules/zones/routes.js";
 import { faresRouter } from "./modules/fares/routes.js";
 import { ridesRouter } from "./modules/rides/routes.js";
 import { driverRouter } from "./modules/driver/routes.js";
+import { poolsRouter } from "./modules/pools/routes.js";
 import { originGuard } from "./http/middleware/origin-guard.js";
 import { createDb } from "./db/client.js";
 
@@ -94,6 +95,7 @@ export function buildApp({
   app.use("/api/v1/fare-quotes", faresRouter(db));
   app.use("/api/v1/ride-requests", ridesRouter(db));
   app.use("/api/v1/driver", driverRouter(db));
+  app.use("/api/v1/driver/pools", poolsRouter(db));
 
   app.use((req, res) => {
     res.status(404).json({

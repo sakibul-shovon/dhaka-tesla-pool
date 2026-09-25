@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client.js";
 import { pools, poolMemberships, poolStatusHistory, rideRequests, users } from "../../db/schema.js";
 import { ACTIVE_POOL_STATUSES, type PoolStatus } from "../../domain/pool-state-machine.js";
@@ -29,6 +29,15 @@ export async function findOpenPoolForVehicle(db: Db | Tx, vehicleId: string): Pr
     .select()
     .from(pools)
     .where(and(eq(pools.vehicleId, vehicleId), eq(pools.status, "OPEN")))
+    .limit(1);
+  return row;
+}
+
+export async function findActivePoolForDriver(db: Db, driverId: string): Promise<PoolRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(pools)
+    .where(and(eq(pools.driverId, driverId), inArray(pools.status, [...ACTIVE_POOL_STATUSES])))
     .limit(1);
   return row;
 }
@@ -149,6 +158,24 @@ export function listUnreleasedMembers(db: Db | Tx, poolId: string): Promise<Memb
 
 export function listAllMembers(db: Db | Tx, poolId: string): Promise<MemberRow[]> {
   return selectMembers(db, poolId, false);
+}
+
+// "Still riding" — unlike listUnreleasedMembers, excludes a member who has
+// already been dropped off. Used to decide whether a drop-off was the last
+// one (pool -> COMPLETED); a completed member is *not* released (plan
+// §5.2: released_at is "cancel / no-show" only), so listUnreleasedMembers
+// alone would never reach zero on a normal, fully-completed trip.
+export async function listActiveMembers(db: Db | Tx, poolId: string): Promise<MemberRow[]> {
+  const rows = await selectMembers(db, poolId, true);
+  return rows.filter((row) => row.droppedOffAt === null);
+}
+
+export async function sumEarningsPaisa(db: Db, poolId: string): Promise<number> {
+  const [row] = await db
+    .select({ total: sql<string>`COALESCE(SUM(${poolMemberships.finalFarePaisa}), 0)` })
+    .from(poolMemberships)
+    .where(eq(poolMemberships.poolId, poolId));
+  return Number(row?.total ?? 0);
 }
 
 export function toMemberDTO(row: MemberRow) {

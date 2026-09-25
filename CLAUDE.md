@@ -59,9 +59,15 @@ plus any section you are about to implement.
 
 ## Commands
 
-Filled in during Phase 1 (`feature/project-foundation`) and kept accurate afterwards:
-`npm run lint` · `npm run typecheck` · `npm test` · `npm run test:integration` · `npm run db:migrate` ·
-`npm run db:seed` · `npm run db:reset` · `docker compose up --build`
+- `npm run verify` — lint + typecheck + unit/integration tests (what the pre-push hook and CI run)
+- `npm run lint` · `npm run typecheck` · `npm test` (each also runs per-workspace via `--workspaces`)
+- `npm run build` — builds `packages/shared` then `apps/api`
+- `npm run dev --workspace=apps/api` — run the API with reload (`tsx watch`)
+- `docker compose up --build` — db (Postgres 17, health-checked) + api (build, health-checked on `/readyz`)
+- `cp .env.example .env` before running the API outside Docker
+
+Not yet added (land with the sessions that need them): `db:migrate`, `db:seed`, `db:reset`
+(`feature/database-schema`), `test:e2e` (`feature/web-driver` or later).
 
 ## End-of-session report (always)
 

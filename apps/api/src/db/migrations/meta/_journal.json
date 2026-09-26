@@ -43,6 +43,13 @@
       "when": 1790410512344,
       "tag": "0005_wallet_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790439360342,
+      "tag": "0006_admin_role",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,7 @@ describe("runSeed", () => {
       `SELECT name, role FROM users ORDER BY name`,
     );
     expect(users).toEqual([
+      { name: "Admin", role: "ADMIN" },
       { name: "Jashim", role: "DRIVER" },
       { name: "Nusrat", role: "PASSENGER" },
       { name: "Rafiq", role: "PASSENGER" },

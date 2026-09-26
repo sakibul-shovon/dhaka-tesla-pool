@@ -14,12 +14,13 @@ const PASSENGERS = [
 ] as const;
 const DRIVER = { name: "Jashim", email: "jashim@dhakateslapool.test" } as const;
 const VEHICLE = { name: "Bullet", capacity: 3, zone: "BANANI" } as const;
+const ADMIN = { name: "Admin", email: "admin@dhakateslapool.test" } as const;
 
 async function upsertUser(
   db: Db,
   email: string,
   name: string,
-  role: "DRIVER" | "PASSENGER",
+  role: "DRIVER" | "PASSENGER" | "ADMIN",
   passwordHash: string,
 ): Promise<string> {
   const [existing] = await db
@@ -49,6 +50,7 @@ export async function runSeed(databaseUrl: string, demoPassword: string): Promis
     for (const passenger of PASSENGERS) {
       await upsertUser(db, passenger.email, passenger.name, "PASSENGER", passwordHash);
     }
+    await upsertUser(db, ADMIN.email, ADMIN.name, "ADMIN", passwordHash);
 
     await db
       .insert(vehicles)
@@ -82,7 +84,7 @@ if (isMain) {
   }
   runSeed(databaseUrl, demoPassword)
     .then(() => {
-      console.log("seed complete: Jashim/Bullet, Nusrat, Rafiq, Shirin");
+      console.log("seed complete: Jashim/Bullet, Nusrat, Rafiq, Shirin, Admin");
     })
     .catch((err: unknown) => {
       console.error("seed failed:", err);

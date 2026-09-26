@@ -7,7 +7,7 @@ export interface UserRow {
   name: string;
   email: string;
   passwordHash: string;
-  role: "PASSENGER" | "DRIVER";
+  role: "PASSENGER" | "DRIVER" | "ADMIN";
   status: "ACTIVE" | "SUSPENDED";
 }
 

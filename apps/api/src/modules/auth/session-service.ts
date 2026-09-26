@@ -13,7 +13,7 @@ export interface AuthenticatedUser {
   id: string;
   name: string;
   email: string;
-  role: "PASSENGER" | "DRIVER";
+  role: "PASSENGER" | "DRIVER" | "ADMIN";
   status: "ACTIVE" | "SUSPENDED";
 }
 

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Car, Clock, LogOut, Zap } from "lucide-react";
 import { api } from "../lib/api-client.js";
 import { useAuth } from "./auth-context.js";
+import { homePathForRole } from "./roles.js";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors " +
@@ -13,6 +14,7 @@ function getInitials(name?: string): string {
   const parts = name.trim().split(/\s+/);
   return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
 }
+  "rounded px-3 py-1.5 text-sm font-medium " + (isActive ? "bg-amber-50 text-amber-700" : "text-neutral-600 hover:text-neutral-900");
 
 export function AppLayout() {
   const { user } = useAuth();
@@ -37,10 +39,11 @@ export function AppLayout() {
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft text-accent-strong">
               <Zap size={16} strokeWidth={2.5} fill="currentColor" />
             </span>
+          <Link to={homePathForRole(user?.role ?? "PASSENGER")} className="font-bold text-neutral-900">
             Dhaka Tesla Pool
           </Link>
           <nav className="flex items-center gap-1">
-            {user?.role === "DRIVER" ? (
+            {user?.role === "DRIVER" && (
               <>
                 <NavLink to="/d" end className={navLinkClass}>
                   <Car size={15} strokeWidth={2.25} />
@@ -51,7 +54,13 @@ export function AppLayout() {
                   History
                 </NavLink>
               </>
-            ) : (
+            )}
+            {user?.role === "ADMIN" && (
+              <NavLink to="/a" end className={navLinkClass}>
+                Drivers
+              </NavLink>
+            )}
+            {user?.role === "PASSENGER" && (
               <>
                 <NavLink to="/p" end className={navLinkClass}>
                   <Car size={15} strokeWidth={2.25} />

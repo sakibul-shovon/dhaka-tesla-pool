@@ -6,6 +6,8 @@ export class ApiError extends Error {
     public readonly code: string,
     message: string,
     public readonly details?: Record<string, unknown>,
+    /** From the `Retry-After` header on 429/503 responses (plan §12.3) — seconds, when the server sent one. */
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
   }
@@ -85,11 +87,14 @@ async function send(path: string, config: RequestConfig): Promise<unknown> {
   if (!res.ok) {
     const envelope = json as ErrorEnvelope | null;
     const err = envelope?.error;
+    const retryAfterHeader = res.headers.get("Retry-After");
+    const retryAfterSeconds = retryAfterHeader === null ? NaN : Number(retryAfterHeader);
     throw new ApiError(
       res.status,
       err?.code ?? "INTERNAL_ERROR",
       err?.message ?? "Something went wrong.",
       err?.details,
+      Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined,
     );
   }
 

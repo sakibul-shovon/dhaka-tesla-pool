@@ -1,14 +1,32 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft } from "lucide-react";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
 import { createRefetchInterval, isColdStart, POLL_BASE_MS } from "../../lib/polling.js";
-import { TERMINAL_POOL_STATUSES, type Pool, type PoolDetail, type PoolMember, type PoolStatusHistoryEntry } from "../../lib/types.js";
+import { useZones } from "../../lib/zones.js";
+import {
+  TERMINAL_POOL_STATUSES,
+  type Pool,
+  type PoolDetail,
+  type PoolMember,
+  type PoolStatusHistoryEntry,
+} from "../../lib/types.js";
 import { SeatMeter } from "../../components/ui/SeatMeter.js";
 import { Timeline } from "../../components/ui/Timeline.js";
 import { ErrorBanner } from "../../components/ui/ErrorBanner.js";
+import { Card } from "../../components/ui/Card.js";
+import { Button } from "../../components/ui/Button.js";
+import { Badge } from "../../components/ui/Badge.js";
+import { Input } from "../../components/ui/Input.js";
+import { Skeleton } from "../../components/ui/Skeleton.js";
+import { Modal } from "../../components/ui/Modal.js";
 
-function memberState(member: PoolMember): string {
+const ZoneMap = lazy(() =>
+  import("../../components/map/ZoneMap.js").then((module) => ({ default: module.ZoneMap })),
+);
+
+function memberState(member: PoolMember): "left" | "dropped off" | "aboard" {
   if (member.releasedAt) return "left";
   if (member.droppedOffAt) return "dropped off";
   return "aboard";
@@ -30,59 +48,68 @@ function MemberRow({
   };
 
   const dropOff = useMutation({
-    mutationFn: () => api.post<Pool>(`/driver/pools/${poolId}/memberships/${member.membershipId}/drop-off`),
+    mutationFn: () =>
+      api.post<Pool>(`/driver/pools/${poolId}/memberships/${member.membershipId}/drop-off`),
     onSuccess: invalidate,
   });
   const noShow = useMutation({
-    mutationFn: () => api.post<Pool>(`/driver/pools/${poolId}/memberships/${member.membershipId}/no-show`),
+    mutationFn: () =>
+      api.post<Pool>(`/driver/pools/${poolId}/memberships/${member.membershipId}/no-show`),
     onSuccess: invalidate,
   });
 
   const active = !member.releasedAt && !member.droppedOffAt;
   const canDropOff = active && poolStatus === "STARTED";
   const canNoShow = active && poolStatus === "DRIVER_ARRIVED";
+  const state = memberState(member);
 
   return (
-    <li className="rounded-lg border border-neutral-200 bg-white p-3">
+    <Card className="p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-neutral-900">{member.passengerName}</p>
-          <p className="text-xs text-neutral-500">
-            → {member.dropoffZone} · {member.seats} seat{member.seats > 1 ? "s" : ""} · {memberState(member)}
+          <p className="text-sm font-medium text-text">{member.passengerName}</p>
+          <p className="text-xs text-text-muted">
+            → {member.dropoffZone} · {member.seats} seat{member.seats > 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex flex-none gap-2">
+        <div className="flex flex-none items-center gap-2">
+          <Badge
+            tone={state === "dropped off" ? "success" : state === "left" ? "neutral" : "accent"}
+          >
+            {state}
+          </Badge>
           {canDropOff && (
-            <button
-              type="button"
+            <Button
               onClick={() => dropOff.mutate()}
               disabled={dropOff.isPending}
-              className="rounded bg-accent px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
+              className="px-2.5 py-1.5 text-xs"
             >
               Drop off
-            </button>
+            </Button>
           )}
           {canNoShow && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => noShow.mutate()}
               disabled={noShow.isPending}
-              className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-600 disabled:opacity-50"
+              className="px-2.5 py-1.5 text-xs"
             >
               No-show
-            </button>
+            </Button>
           )}
         </div>
       </div>
       {(dropOff.isError || noShow.isError) && (
-        <p className="mt-1 text-xs text-red-600">
+        <p className="mt-2 text-xs text-danger">
           {(() => {
             const error = dropOff.error ?? noShow.error;
-            return error instanceof ApiError ? messageForError(error.code, error.message) : "Something went wrong.";
+            return error instanceof ApiError
+              ? messageForError(error.code, error.message)
+              : "Something went wrong.";
           })()}
         </p>
       )}
-    </li>
+    </Card>
   );
 }
 
@@ -90,6 +117,8 @@ export function DriverPoolPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [cancelReason, setCancelReason] = useState("");
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const zonesQuery = useZones();
 
   const poolQuery = useQuery({
     queryKey: ["driver", "pools", id],
@@ -102,7 +131,8 @@ export function DriverPoolPage() {
 
   const historyQuery = useQuery({
     queryKey: ["driver", "pools", id, "history"],
-    queryFn: ({ signal }) => api.get<PoolStatusHistoryEntry[]>(`/driver/pools/${id}/history`, signal),
+    queryFn: ({ signal }) =>
+      api.get<PoolStatusHistoryEntry[]>(`/driver/pools/${id}/history`, signal),
   });
 
   const poolStatus = poolQuery.data?.pool.status;
@@ -114,7 +144,8 @@ export function DriverPoolPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poolStatus]);
 
-  const invalidatePool = () => void queryClient.invalidateQueries({ queryKey: ["driver", "pools", id] });
+  const invalidatePool = () =>
+    void queryClient.invalidateQueries({ queryKey: ["driver", "pools", id] });
 
   const arrive = useMutation({
     mutationFn: () => api.post<Pool>(`/driver/pools/${id}/arrive`),
@@ -125,12 +156,21 @@ export function DriverPoolPage() {
     onSuccess: invalidatePool,
   });
   const cancelPool = useMutation({
-    mutationFn: () => api.post<Pool>(`/driver/pools/${id}/cancel`, cancelReason ? { reason: cancelReason } : {}),
-    onSuccess: invalidatePool,
+    mutationFn: () =>
+      api.post<Pool>(`/driver/pools/${id}/cancel`, cancelReason ? { reason: cancelReason } : {}),
+    onSuccess: () => {
+      invalidatePool();
+      setConfirmCancelOpen(false);
+    },
   });
 
   if (poolQuery.isPending) {
-    return <div className="h-40 max-w-md animate-pulse rounded-lg bg-neutral-100" />;
+    return (
+      <div className="max-w-md space-y-4">
+        <Skeleton className="h-6 w-20" />
+        <Skeleton className="h-48 rounded-2xl" />
+      </div>
+    );
   }
 
   if (poolQuery.isError) {
@@ -144,89 +184,142 @@ export function DriverPoolPage() {
   }
 
   const { pool, members } = poolQuery.data;
-  const actionError = arrive.error ?? start.error ?? cancelPool.error;
+  const actionError = arrive.error ?? start.error;
+  const zones = zonesQuery.data ?? [];
+  const zoneName = (code: string) => zones.find((zone) => zone.code === code)?.name ?? code;
+  const canCancel = pool.status === "OPEN" || pool.status === "DRIVER_ARRIVED";
+  const activeDropoffs = [
+    ...new Set(members.filter((member) => !member.releasedAt).map((member) => member.dropoffZone)),
+  ];
 
   return (
     <div className="max-w-md space-y-4">
-      <Link to="/d" className="text-sm text-neutral-500 hover:text-neutral-700">
-        ← Back
+      <Link
+        to="/d"
+        className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text"
+      >
+        <ArrowLeft size={15} strokeWidth={2.25} />
+        Back
       </Link>
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
-        <p className="text-lg font-semibold text-neutral-900">Pickup: {pool.pickupZone}</p>
-        <p className="text-sm text-neutral-500">Status: {pool.status.replace("_", " ").toLowerCase()}</p>
-        <div className="mt-3">
+      <Card>
+        <div className="flex items-center justify-between">
+          <p className="font-display text-lg font-semibold text-text">
+            Pickup: {zoneName(pool.pickupZone)}
+          </p>
+          <Badge tone="accent">{pool.status.replace("_", " ").toLowerCase()}</Badge>
+        </div>
+        <div className="mt-3 h-40 overflow-hidden rounded-xl border border-border">
+          <Suspense fallback={<Skeleton className="h-full w-full" />}>
+            <ZoneMap
+              className="h-full w-full"
+              interactive={false}
+              markers={[
+                { zoneCode: pool.pickupZone, label: zoneName(pool.pickupZone), tone: "driver" },
+                ...activeDropoffs.map((code) => ({
+                  zoneCode: code,
+                  label: zoneName(code),
+                  tone: "dropoff" as const,
+                })),
+              ]}
+            />
+          </Suspense>
+        </div>
+        <div className="mt-4">
           <SeatMeter capacity={pool.capacitySnapshot} reserved={pool.seatsReserved} />
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
           {pool.status === "OPEN" && (
-            <button
-              type="button"
-              onClick={() => arrive.mutate()}
-              disabled={arrive.isPending}
-              className="rounded bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
+            <Button onClick={() => arrive.mutate()} disabled={arrive.isPending}>
               {arrive.isPending ? "Marking arrived…" : "I've arrived"}
-            </button>
+            </Button>
           )}
           {pool.status === "DRIVER_ARRIVED" && (
-            <button
-              type="button"
-              onClick={() => start.mutate()}
-              disabled={start.isPending}
-              className="rounded bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
+            <Button onClick={() => start.mutate()} disabled={start.isPending}>
               {start.isPending ? "Starting…" : "Start trip"}
-            </button>
+            </Button>
           )}
-          {(pool.status === "OPEN" || pool.status === "DRIVER_ARRIVED") && (
-            <button
-              type="button"
-              onClick={() => cancelPool.mutate()}
-              disabled={cancelPool.isPending}
-              className="rounded border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-            >
-              {cancelPool.isPending ? "Cancelling…" : "Cancel pool"}
-            </button>
+          {canCancel && (
+            <Button variant="danger" onClick={() => setConfirmCancelOpen(true)}>
+              Cancel pool
+            </Button>
           )}
         </div>
-        {(pool.status === "OPEN" || pool.status === "DRIVER_ARRIVED") && (
-          <input
-            value={cancelReason}
-            onChange={(event) => setCancelReason(event.target.value)}
-            placeholder="Cancellation reason (optional)"
-            className="mt-2 w-full rounded border border-neutral-200 px-2 py-1 text-xs"
-          />
-        )}
         {actionError && (
-          <p className="mt-2 text-sm text-red-600">
-            {actionError instanceof ApiError ? messageForError(actionError.code, actionError.message) : "Something went wrong."}
+          <p className="mt-2 text-sm text-danger">
+            {actionError instanceof ApiError
+              ? messageForError(actionError.code, actionError.message)
+              : "Something went wrong."}
           </p>
         )}
-      </div>
+      </Card>
 
       <div>
-        <h2 className="text-sm font-semibold text-neutral-900">Passengers</h2>
+        <h2 className="text-sm font-semibold text-text">Passengers</h2>
         <ul className="mt-2 space-y-2">
           {members.map((member) => (
-            <MemberRow key={member.membershipId} poolId={pool.id} poolStatus={pool.status} member={member} />
+            <li key={member.membershipId}>
+              <MemberRow poolId={pool.id} poolStatus={pool.status} member={member} />
+            </li>
           ))}
         </ul>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-neutral-900">Timeline</h2>
+      <Card>
+        <h2 className="text-sm font-semibold text-text">Timeline</h2>
         <div className="mt-3">
           {historyQuery.isPending ? (
-            <div className="h-16 animate-pulse rounded bg-neutral-100" />
+            <Skeleton className="h-16 rounded-lg" />
           ) : historyQuery.isError ? (
-            <p className="text-sm text-neutral-500">Couldn't load the timeline.</p>
+            <p className="text-sm text-text-muted">Couldn't load the timeline.</p>
           ) : (
             <Timeline entries={historyQuery.data} />
           )}
         </div>
-      </div>
+      </Card>
+
+      <Modal
+        open={confirmCancelOpen}
+        onClose={() => setConfirmCancelOpen(false)}
+        title="Cancel this pool?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmCancelOpen(false)}>
+              Keep it
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => cancelPool.mutate()}
+              disabled={cancelPool.isPending}
+            >
+              {cancelPool.isPending ? "Cancelling…" : "Cancel pool"}
+            </Button>
+          </>
+        }
+      >
+        <p>
+          Every passenger currently aboard will be cancelled and will need to re-request. This can't
+          be undone.
+        </p>
+        <div className="mt-3 space-y-1.5">
+          <label htmlFor="cancel-reason" className="block text-sm font-medium text-text">
+            Reason (optional)
+          </label>
+          <Input
+            id="cancel-reason"
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+          />
+        </div>
+        {cancelPool.isError && (
+          <p className="mt-2 text-sm text-danger">
+            {cancelPool.error instanceof ApiError
+              ? messageForError(cancelPool.error.code, cancelPool.error.message)
+              : "Something went wrong."}
+          </p>
+        )}
+      </Modal>
     </div>
   );
 }

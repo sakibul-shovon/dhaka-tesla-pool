@@ -169,6 +169,7 @@ export function PassengerHomePage() {
             soloFarePaisa={quoteQuery.data.soloFarePaisa}
             pooledFarePaisa={quoteQuery.data.pooledFarePaisa}
             isFinal={false}
+            pooled={false}
           />
         )}
 

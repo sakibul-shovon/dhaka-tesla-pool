@@ -4,13 +4,14 @@ export function FareCard({
   soloFarePaisa,
   pooledFarePaisa,
   isFinal,
+  pooled,
 }: {
   soloFarePaisa: number;
   pooledFarePaisa: number;
   isFinal: boolean;
+  /** Whether pooling actually applies (an active pool-mate before start, the frozen outcome after) — not just "would this trip discount if pooled". */
+  pooled: boolean;
 }) {
-  const pooled = pooledFarePaisa < soloFarePaisa;
-
   return (
     <div className="rounded-lg border border-neutral-200 bg-white p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">

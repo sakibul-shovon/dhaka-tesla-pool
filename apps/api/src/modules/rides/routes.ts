@@ -3,12 +3,14 @@ import { ERROR_CODES } from "@dhaka-tesla-pool/shared";
 import type { Db } from "../../db/client.js";
 import { computeFare } from "../../domain/fare.js";
 import { manhattanDistanceDkm } from "../../domain/geography.js";
+import { canJoin } from "../../domain/matching.js";
 import { applyRideTransition } from "../../domain-writes/ride-transitions.js";
 import { HttpError } from "../../http/error-mapper.js";
 import { authenticate } from "../../http/middleware/authenticate.js";
 import { requireRole } from "../../http/middleware/role-guard.js";
 import { decodeCursor, encodeCursor } from "../../http/pagination.js";
 import { sendData, sendPage } from "../../http/response.js";
+import { firstNameOf } from "../../lib/names.js";
 import {
   claimIdempotencyKey,
   finalizeIdempotencyKey,
@@ -23,7 +25,10 @@ import { createLockOrderGuard, lockPoolById } from "../../lib/lock-order.js";
 import { applyPoolTransition } from "../../domain-writes/pool-transitions.js";
 import {
   findMembershipByRideRequestId,
+  findPoolSummaryForRideRequest,
+  listOpenPoolsInZone,
   releaseMembership,
+  toPoolSummaryDTO,
   updatePoolSeatsReserved,
   listUnreleasedMembers,
 } from "../pools/repository.js";
@@ -182,7 +187,53 @@ export function ridesRouter(db: Db): Router {
         next(new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride."));
         return;
       }
-      sendData(res, 200, toRideRequestDTO(ride));
+      const poolSummary = await findPoolSummaryForRideRequest(db, ride.id);
+      sendData(res, 200, { ...toRideRequestDTO(ride), pool: poolSummary ? toPoolSummaryDTO(poolSummary) : null });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Compatible OPEN pools for this request (plan §12.2's pool-offers, §7.2's
+  // matching rule) — not locked, since this is a read-only preview: the real
+  // check happens under lock at join time, and a stale offer just becomes a
+  // 409 the client refetches from (plan's C-table "offer disappears before
+  // Join").
+  router.get("/:id/pool-offers", requireAuth, requirePassenger, async (req, res, next) => {
+    try {
+      const ride = await findRideRequestByOwner(db, requireIdParam(req.params.id), req.user!.id);
+      if (!ride) {
+        next(new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride."));
+        return;
+      }
+      if (ride.status !== "REQUESTED") {
+        next(new HttpError(409, ERROR_CODES.REQUEST_NOT_OPEN, "This ride was already matched or cancelled."));
+        return;
+      }
+
+      const candidates = await listOpenPoolsInZone(db, ride.pickupZone);
+      const offers = [];
+      for (const candidate of candidates) {
+        const members = await listUnreleasedMembers(db, candidate.poolId);
+        const capacityRemaining = candidate.capacitySnapshot - candidate.seatsReserved;
+        const match = canJoin(
+          { status: "OPEN", pickupZone: candidate.pickupZone, capacityRemaining },
+          { status: ride.status, seats: ride.seats, pickupZone: ride.pickupZone, dropoffZone: ride.dropoffZone },
+          members.map((m) => ({ dropoffZone: m.dropoffZone })),
+        );
+        if (match.compatible) {
+          offers.push({
+            poolId: candidate.poolId,
+            vehicleName: candidate.vehicleName,
+            driverFirstName: firstNameOf(candidate.driverName),
+            seatsLeft: capacityRemaining,
+            sharedWithCount: members.length,
+            soloFarePaisa: ride.soloFarePaisa,
+            pooledFarePaisa: ride.pooledFarePaisa,
+          });
+        }
+      }
+      sendData(res, 200, offers);
     } catch (err) {
       next(err);
     }

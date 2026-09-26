@@ -10,6 +10,7 @@ import { decodeCursor, encodeCursor } from "../../http/pagination.js";
 import { sendData, sendPage } from "../../http/response.js";
 import { createLockOrderGuard, lockRideRequestsByIds } from "../../lib/lock-order.js";
 import { runInTransaction } from "../../lib/transaction.js";
+import { logBusinessEvent } from "../../lib/business-events.js";
 import {
   findActivePoolForDriver,
   findMembershipInPool,
@@ -154,6 +155,7 @@ export function poolsRouter(db: Db): Router {
         }
       });
 
+      logBusinessEvent(req.log, "pool.arrived", { poolId, driverId });
       sendData(res, 200, await refetchPoolDTO(db, poolId, driverId));
     } catch (err) {
       next(err);
@@ -195,6 +197,7 @@ export function poolsRouter(db: Db): Router {
         }
       });
 
+      logBusinessEvent(req.log, "pool.started", { poolId, driverId });
       sendData(res, 200, await refetchPoolDTO(db, poolId, driverId));
     } catch (err) {
       next(err);
@@ -251,6 +254,7 @@ export function poolsRouter(db: Db): Router {
         }
       });
 
+      logBusinessEvent(req.log, "ride.dropped_off", { poolId, membershipId, driverId });
       sendData(res, 200, await refetchPoolDTO(db, poolId, driverId));
     } catch (err) {
       next(err);

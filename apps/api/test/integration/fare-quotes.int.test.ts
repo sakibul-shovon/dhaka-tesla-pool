@@ -106,4 +106,16 @@ describe("POST /fare-quotes (plan §8, §12.2)", () => {
 
     expect(res.status).toBe(400);
   });
+
+  it("rejects more than 3 seats — the product cap, not the DB's wider physical range (plan A23)", async () => {
+    const app = buildTestApp(pool, logger);
+    const agent = await registerAndLogin(app);
+
+    const res = await agent
+      .post("/api/v1/fare-quotes")
+      .send({ pickupZone: "BANANI", dropoffZone: "MOHAKHALI", seats: 4 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_FAILED");
+  });
 });

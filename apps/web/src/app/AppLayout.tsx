@@ -33,16 +33,25 @@ function navItemsForRole(role: string | undefined): NavItem[] {
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors " +
-  (isActive ? "bg-accent-soft text-accent-strong" : "text-text-muted hover:bg-surface-raised hover:text-text");
+  (isActive
+    ? "bg-accent-soft text-accent-strong"
+    : "text-text-muted hover:bg-surface-raised hover:text-text");
 
 const mobileNavLinkClass = ({ isActive }: { isActive: boolean }) =>
   "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors " +
-  (isActive ? "bg-accent-soft text-accent-strong" : "text-text-muted hover:bg-surface-raised hover:text-text");
+  (isActive
+    ? "bg-accent-soft text-accent-strong"
+    : "text-text-muted hover:bg-surface-raised hover:text-text");
 
 function getInitials(name?: string): string {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
-  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
+  return (
+    parts
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "?"
+  );
 }
 
 export function AppLayout() {
@@ -116,7 +125,11 @@ export function AppLayout() {
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-raised hover:text-text md:hidden"
           >
-            {mobileOpen ? <X size={20} strokeWidth={2.25} /> : <Menu size={20} strokeWidth={2.25} />}
+            {mobileOpen ? (
+              <X size={20} strokeWidth={2.25} />
+            ) : (
+              <Menu size={20} strokeWidth={2.25} />
+            )}
           </button>
         </div>
 

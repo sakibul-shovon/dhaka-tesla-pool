@@ -40,7 +40,9 @@ export function MarketingLayout() {
             </span>
             Dhaka Tesla Pool
           </span>
-          <p className="text-xs text-text-faint">Share a seat. Split the fare. Survive Dhaka traffic.</p>
+          <p className="text-xs text-text-faint">
+            Share a seat. Split the fare. Survive Dhaka traffic.
+          </p>
         </div>
       </footer>
     </div>

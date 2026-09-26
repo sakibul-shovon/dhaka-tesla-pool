@@ -20,7 +20,9 @@ import { AdminDashboardPage } from "../features/admin/AdminDashboardPage.js";
 // the bundle for the authenticated app — this is its own chunk, fetched
 // only when a visitor actually lands on "/".
 const LandingPage = lazy(() =>
-  import("../features/marketing/LandingPage.js").then((module) => ({ default: module.LandingPage })),
+  import("../features/marketing/LandingPage.js").then((module) => ({
+    default: module.LandingPage,
+  })),
 );
 
 // Role checks here are UX only (plan §15.1) — the API enforces the real

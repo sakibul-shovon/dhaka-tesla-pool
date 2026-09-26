@@ -5,7 +5,10 @@ import { ApiError } from "./api-client.js";
 // countdown surfaced clearly") instead of leaving the user to guess how
 // long "in a moment" actually is.
 export function useRetryCountdown(error: unknown): number | undefined {
-  const initialSeconds = error instanceof ApiError && error.code === "RATE_LIMITED" ? error.retryAfterSeconds : undefined;
+  const initialSeconds =
+    error instanceof ApiError && error.code === "RATE_LIMITED"
+      ? error.retryAfterSeconds
+      : undefined;
   const [remaining, setRemaining] = useState(initialSeconds);
   const [lastInitialSeconds, setLastInitialSeconds] = useState(initialSeconds);
 

@@ -25,7 +25,8 @@ export interface Driver {
   vehicle: DriverVehicle;
 }
 
-export type RideStatus = "REQUESTED" | "MATCHED" | "DRIVER_ARRIVED" | "STARTED" | "COMPLETED" | "CANCELLED";
+export type RideStatus =
+  "REQUESTED" | "MATCHED" | "DRIVER_ARRIVED" | "STARTED" | "COMPLETED" | "CANCELLED";
 
 export interface RideRequest {
   id: string;
@@ -104,7 +105,12 @@ export interface FareQuote {
   pooledFarePaisa: number;
 }
 
-export const ACTIVE_RIDE_STATUSES: readonly RideStatus[] = ["REQUESTED", "MATCHED", "DRIVER_ARRIVED", "STARTED"];
+export const ACTIVE_RIDE_STATUSES: readonly RideStatus[] = [
+  "REQUESTED",
+  "MATCHED",
+  "DRIVER_ARRIVED",
+  "STARTED",
+];
 export const TERMINAL_RIDE_STATUSES: readonly RideStatus[] = ["COMPLETED", "CANCELLED"];
 
 export interface DriverStatus {

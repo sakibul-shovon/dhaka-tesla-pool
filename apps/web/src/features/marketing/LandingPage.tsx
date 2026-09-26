@@ -58,16 +58,23 @@ export function LandingPage() {
 
   useGSAP(
     () => {
-      const reveals = gsap.utils.toArray<HTMLElement>("[data-reveal]");
-      for (const el of reveals) {
-        gsap.from(el, {
-          opacity: 0,
-          y: 24,
-          duration: 0.6,
-          ease: "power2.out",
-          scrollTrigger: { trigger: el, start: "top 88%" },
-        });
-      }
+      const mm = gsap.matchMedia();
+      // Respect the OS setting the same way Motion does elsewhere in the app
+      // (plan §8) — GSAP has no global equivalent to MotionConfig, so each
+      // scroll-triggered set-piece needs its own matchMedia branch.
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const reveals = gsap.utils.toArray<HTMLElement>("[data-reveal]");
+        for (const el of reveals) {
+          gsap.from(el, {
+            opacity: 0,
+            y: 24,
+            duration: 0.6,
+            ease: "power2.out",
+            scrollTrigger: { trigger: el, start: "top 88%" },
+          });
+        }
+      });
+      return () => mm.revert();
     },
     { scope: containerRef, dependencies: [zones.length] },
   );
@@ -85,8 +92,8 @@ export function LandingPage() {
             Survive Dhaka traffic.
           </h1>
           <p className="mt-4 max-w-md text-base text-text-muted">
-            Request a ride across ten Dhaka zones. When someone's headed your way, split a Tesla and the
-            fare — automatically, fairly, and transparently.
+            Request a ride across ten Dhaka zones. When someone's headed your way, split a Tesla and
+            the fare — automatically, fairly, and transparently.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link
@@ -144,7 +151,11 @@ export function LandingPage() {
         </h2>
         <div className="mt-10 grid gap-6 sm:grid-cols-2">
           {TRUST_POINTS.map(({ Icon, title, body }) => (
-            <div key={title} data-reveal className="flex gap-4 rounded-2xl border border-border bg-surface p-5">
+            <div
+              key={title}
+              data-reveal
+              className="flex gap-4 rounded-2xl border border-border bg-surface p-5"
+            >
               <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-electric-soft text-electric">
                 <Icon size={17} strokeWidth={2.25} />
               </span>
@@ -168,8 +179,9 @@ export function LandingPage() {
             className="w-36 rounded-xl border-4 border-surface shadow-lg sm:w-40"
           />
           <p className="max-w-xl text-sm text-text-muted">
-            In Dhaka, your Tesla may have three wheels — a battery rickshaw with a hand-painted badge, not a
-            car. The pooling, the fares, and the seat-capacity math are all built around exactly that.
+            In Dhaka, your Tesla may have three wheels — a battery rickshaw with a hand-painted
+            badge, not a car. The pooling, the fares, and the seat-capacity math are all built
+            around exactly that.
           </p>
         </div>
       </section>

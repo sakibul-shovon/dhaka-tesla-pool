@@ -51,7 +51,7 @@ function OfferRow({ offer, rideId }: { offer: PoolOffer; rideId: string }) {
           type="button"
           onClick={() => join.mutate()}
           disabled={join.isPending}
-          className="flex-none rounded bg-[--color-accent] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+          className="flex-none rounded bg-accent px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
         >
           {join.isPending ? "Joining…" : "Join"}
         </button>

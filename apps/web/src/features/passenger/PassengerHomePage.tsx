@@ -16,7 +16,7 @@ function ActiveRideCard({ ride }: { ride: RideRequest }) {
       <p className="mt-1 text-sm text-neutral-500">Status: {ride.status.replace("_", " ").toLowerCase()}</p>
       <Link
         to={`/p/rides/${ride.id}`}
-        className="mt-4 inline-block rounded bg-[--color-accent] px-3 py-2 text-sm font-semibold text-white"
+        className="mt-4 inline-block rounded bg-accent px-3 py-2 text-sm font-semibold text-white"
       >
         View ride
       </Link>
@@ -187,7 +187,7 @@ export function PassengerHomePage() {
         <button
           type="submit"
           disabled={!quoteQuery.data || createRide.isPending}
-          className="w-full rounded bg-[--color-accent] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="w-full rounded bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
           {createRide.isPending ? "Requesting…" : "Request Tesla"}
         </button>

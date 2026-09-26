@@ -19,6 +19,14 @@ import {
 } from "../../lib/idempotency.js";
 import { isUniqueViolation } from "../../lib/pg-errors.js";
 import { runInTransaction } from "../../lib/transaction.js";
+import { createLockOrderGuard, lockPoolById } from "../../lib/lock-order.js";
+import { applyPoolTransition } from "../../domain-writes/pool-transitions.js";
+import {
+  findMembershipByRideRequestId,
+  releaseMembership,
+  updatePoolSeatsReserved,
+  listUnreleasedMembers,
+} from "../pools/repository.js";
 import {
   RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX,
   findActiveRideRequestId,
@@ -217,12 +225,31 @@ export function ridesRouter(db: Db): Router {
           return { replayed: true, status: claim.responseStatus, body: claim.responseBody };
         }
 
-        const locked = await lockRideRequestForOwner(tx, rideRequestId, passengerId);
+        // Plan §10.4's cancelRideRequest script: read the (unlocked)
+        // membership first only to learn whether a pool needs locking, then
+        // lock pool -> requests, respecting the global order (plan §10.2) —
+        // never the other way around.
+        const membership = await findMembershipByRideRequestId(tx, rideRequestId);
+        const guard = createLockOrderGuard();
+        const lockedPool =
+          membership && !membership.releasedAt ? await lockPoolById(tx, membership.poolId, guard) : undefined;
+
+        const locked = await lockRideRequestForOwner(tx, rideRequestId, passengerId, guard);
         if (!locked) {
           throw new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride.");
         }
 
         const updated = await applyRideTransition(tx, locked, "cancel", passengerId, parsed.data.reason);
+
+        if (lockedPool && membership) {
+          await releaseMembership(tx, membership.id);
+          await updatePoolSeatsReserved(tx, lockedPool.id, lockedPool.seatsReserved - locked.seats);
+          const stillUnreleased = await listUnreleasedMembers(tx, lockedPool.id);
+          if (stillUnreleased.length === 0 && lockedPool.status !== "STARTED") {
+            await applyPoolTransition(tx, lockedPool, "emptyCancel", passengerId, "EMPTY");
+          }
+        }
+
         const dto = toRideRequestDTO(updated);
         await finalizeIdempotencyKey(tx, passengerId, idempotencyKey, 200, dto);
         return { replayed: false, status: 200, body: dto };

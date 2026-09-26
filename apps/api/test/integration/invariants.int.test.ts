@@ -36,13 +36,65 @@ describe("assertInvariants", () => {
       [driver!.id],
     );
     // seats_reserved claims 2 while no membership backs that up — a drift the DB CHECK alone can't catch.
-    await pool.query(
-      `INSERT INTO pools (vehicle_id, driver_id, pickup_zone, capacity_snapshot, seats_reserved) VALUES ($1, $2, 'BANANI', 3, 2)`,
+    const {
+      rows: [poolRow],
+    } = await pool.query<{ id: string }>(
+      `INSERT INTO pools (vehicle_id, driver_id, pickup_zone, capacity_snapshot, seats_reserved) VALUES ($1, $2, 'BANANI', 3, 2) RETURNING id`,
       [vehicle!.id, driver!.id],
     );
+    // A real pool always gets an OPEN creation history row (insertPoolCreationHistory) —
+    // write it here too so this fixture isolates the I4 drift, not I14.
+    await pool.query(`INSERT INTO pool_status_history (pool_id, from_status, to_status) VALUES ($1, NULL, 'OPEN')`, [
+      poolRow!.id,
+    ]);
 
     const violations = await assertInvariants(pool);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.invariant).toContain("I4");
+  });
+
+  it("catches a ride request whose latest history row disagrees with its status (I14)", async () => {
+    const {
+      rows: [passenger],
+    } = await pool.query<{ id: string }>(
+      `INSERT INTO users (name, email, password_hash, role) VALUES ('P', 'i14@dhakateslapool.test', 'x', 'PASSENGER') RETURNING id`,
+    );
+    const {
+      rows: [ride],
+    } = await pool.query<{ id: string }>(
+      `INSERT INTO ride_requests (passenger_id, pickup_zone, dropoff_zone, seats, distance_dkm, solo_fare_paisa, pooled_fare_paisa, payment_method, status)
+       VALUES ($1, 'BANANI', 'MOHAKHALI', 1, 25, 6750, 5400, 'CASH', 'CANCELLED') RETURNING id`,
+      [passenger!.id],
+    );
+    // History still says REQUESTED — a drift only a real transition-writing bug could cause.
+    await pool.query(
+      `INSERT INTO ride_status_history (ride_request_id, from_status, to_status) VALUES ($1, NULL, 'REQUESTED')`,
+      [ride!.id],
+    );
+
+    const violations = await assertInvariants(pool);
+    expect(violations.some((v) => v.invariant.includes("I14") && v.invariant.includes("ride_request"))).toBe(true);
+  });
+
+  it("catches a terminal ride request with no terminal timestamp", async () => {
+    const {
+      rows: [passenger],
+    } = await pool.query<{ id: string }>(
+      `INSERT INTO users (name, email, password_hash, role) VALUES ('P', 'terminal@dhakateslapool.test', 'x', 'PASSENGER') RETURNING id`,
+    );
+    const {
+      rows: [ride],
+    } = await pool.query<{ id: string }>(
+      `INSERT INTO ride_requests (passenger_id, pickup_zone, dropoff_zone, seats, distance_dkm, solo_fare_paisa, pooled_fare_paisa, payment_method, status)
+       VALUES ($1, 'BANANI', 'MOHAKHALI', 1, 25, 6750, 5400, 'CASH', 'COMPLETED') RETURNING id`,
+      [passenger!.id],
+    );
+    await pool.query(
+      `INSERT INTO ride_status_history (ride_request_id, from_status, to_status) VALUES ($1, 'STARTED', 'COMPLETED')`,
+      [ride!.id],
+    );
+
+    const violations = await assertInvariants(pool);
+    expect(violations.some((v) => v.invariant.includes("terminal ride_request"))).toBe(true);
   });
 });

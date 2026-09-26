@@ -9,6 +9,8 @@ export class HttpError extends Error {
     public readonly code: ErrorCode,
     message: string,
     public readonly details?: Record<string, unknown>,
+    /** Seconds for a `Retry-After` header (plan §10.3's `SERVICE_BUSY`) — never part of the JSON body. */
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
   }
@@ -43,6 +45,9 @@ export const errorMapper: ErrorRequestHandler = (err, req, res, _next) => {
   const id = requestId(req, res);
 
   if (err instanceof HttpError) {
+    if (err.retryAfterSeconds !== undefined) {
+      res.setHeader("Retry-After", String(err.retryAfterSeconds));
+    }
     sendError(res, err.status, err.code, err.message, id, err.details);
     return;
   }

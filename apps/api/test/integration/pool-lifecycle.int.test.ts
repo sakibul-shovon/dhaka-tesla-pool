@@ -115,6 +115,7 @@ describe("single-passenger pool lifecycle (plan: Nusrat -> Jashim accepts -> arr
 
     const poolHistory = await request(app).get(`/api/v1/driver/pools/${poolId}/history`).set("Cookie", jashim.cookie);
     expect(poolHistory.body.data.map((h: { toStatus: string }) => h.toStatus)).toEqual([
+      "OPEN",
       "DRIVER_ARRIVED",
       "STARTED",
       "COMPLETED",

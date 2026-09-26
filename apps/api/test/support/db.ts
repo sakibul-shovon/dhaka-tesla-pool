@@ -9,6 +9,6 @@ export function testDatabaseUrl(): string {
   return url;
 }
 
-export function createTestPool(): Pool {
-  return new Pool({ connectionString: testDatabaseUrl() });
+export function createTestPool(options?: { max?: number }): Pool {
+  return new Pool({ connectionString: testDatabaseUrl(), ...(options?.max ? { max: options.max } : {}) });
 }

@@ -15,6 +15,7 @@ import { ridesRouter } from "./modules/rides/routes.js";
 import { driverRouter } from "./modules/driver/routes.js";
 import { poolsRouter } from "./modules/pools/routes.js";
 import { passengerPoolsRouter } from "./modules/pools/passenger-routes.js";
+import { walletRouter } from "./modules/wallet/routes.js";
 import { originGuard } from "./http/middleware/origin-guard.js";
 import { createDb } from "./db/client.js";
 
@@ -98,6 +99,7 @@ export function buildApp({
   app.use("/api/v1/driver", driverRouter(db));
   app.use("/api/v1/driver/pools", poolsRouter(db));
   app.use("/api/v1/pools", passengerPoolsRouter(db));
+  app.use("/api/v1/wallet", walletRouter(db));
 
   app.use((req, res) => {
     res.status(404).json({

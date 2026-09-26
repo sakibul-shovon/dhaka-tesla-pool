@@ -6,10 +6,15 @@ import type { PoolStatus } from "../domain/pool-state-machine.js";
 import { markLocked, type Locked } from "../domain-writes/locked.js";
 
 // Global lock order (plan §10.2): vehicle -> pool -> ride_requests (ascending
-// id). Every write path that touches more than one of these acquires a
-// prefix-respecting subsequence of this order; `LockOrderGuard` makes a
-// mistake fail loudly in dev/test instead of silently risking a deadlock.
-const STAGE_RANK = { vehicle: 0, pool: 1, requests: 2 } as const;
+// id) -> wallet. Every write path that touches more than one of these
+// acquires a prefix-respecting subsequence of this order; `LockOrderGuard`
+// makes a mistake fail loudly in dev/test instead of silently risking a
+// deadlock. `wallet` is last: the only write path that locks it alongside
+// anything else is drop-off's TeslaPay debit (plan §8.4), which locks the
+// pool and the ride request first and the wallet only as its final step —
+// top-up locks the wallet alone, so there is no path that could ever want
+// the reverse order.
+const STAGE_RANK = { vehicle: 0, pool: 1, requests: 2, wallet: 3 } as const;
 type LockStage = keyof typeof STAGE_RANK;
 
 export class LockOrderGuard {

@@ -6,6 +6,8 @@ import type { Pool } from "pg";
 // for the append-only tables.
 const BUSINESS_TABLES = [
   "idempotency_keys",
+  "wallet_transactions",
+  "wallets",
   "pool_status_history",
   "ride_status_history",
   "pool_memberships",

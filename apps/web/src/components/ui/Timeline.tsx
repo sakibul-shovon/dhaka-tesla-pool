@@ -1,6 +1,5 @@
-import type { RideStatusHistoryEntry } from "../../lib/types.js";
-
 const STATUS_LABELS: Record<string, string> = {
+  OPEN: "Pool opened",
   REQUESTED: "Requested",
   MATCHED: "Matched with a Tesla",
   DRIVER_ARRIVED: "Driver arrived",
@@ -9,7 +8,17 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-export function Timeline({ entries }: { entries: RideStatusHistoryEntry[] }) {
+// Shared by the ride and pool timelines (plan: "reuse existing
+// components") — both history rows have this exact shape, just drawn from
+// a different status enum.
+export interface TimelineEntry {
+  id: number;
+  toStatus: string;
+  reason: string | null;
+  createdAt: string;
+}
+
+export function Timeline({ entries }: { entries: TimelineEntry[] }) {
   if (entries.length === 0) {
     return <p className="text-sm text-neutral-500">No history yet.</p>;
   }

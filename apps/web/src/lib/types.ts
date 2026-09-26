@@ -55,3 +55,77 @@ export interface FareQuote {
 
 export const ACTIVE_RIDE_STATUSES: readonly RideStatus[] = ["REQUESTED", "MATCHED", "DRIVER_ARRIVED", "STARTED"];
 export const TERMINAL_RIDE_STATUSES: readonly RideStatus[] = ["COMPLETED", "CANCELLED"];
+
+export interface DriverStatus {
+  vehicleId: string;
+  name: string;
+  capacity: number;
+  isOnline: boolean;
+  currentZone: string | null;
+  activePoolId: string | null;
+}
+
+export interface RelevantRequest {
+  id: string;
+  pickupZone: string;
+  dropoffZone: string;
+  seats: number;
+  distanceDkm: number;
+  soloFarePaisa: number;
+  pooledFarePaisa: number;
+  createdAt: string;
+}
+
+export type PoolStatus = "OPEN" | "DRIVER_ARRIVED" | "STARTED" | "COMPLETED" | "CANCELLED";
+export const TERMINAL_POOL_STATUSES: readonly PoolStatus[] = ["COMPLETED", "CANCELLED"];
+
+export interface Pool {
+  id: string;
+  vehicleId: string;
+  driverId: string;
+  pickupZone: string;
+  status: PoolStatus;
+  capacitySnapshot: number;
+  seatsReserved: number;
+  createdAt: string;
+  arrivedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+}
+
+export interface PoolWithEarnings extends Pool {
+  earningsPaisa: number;
+}
+
+export interface PoolMember {
+  membershipId: string;
+  rideRequestId: string;
+  passengerName: string;
+  seats: number;
+  dropoffZone: string;
+  finalFarePaisa: number | null;
+  sharedRide: boolean | null;
+  joinedAt: string;
+  releasedAt: string | null;
+  droppedOffAt: string | null;
+}
+
+export interface PoolDetail {
+  pool: Pool;
+  members: PoolMember[];
+}
+
+export interface AcceptResult {
+  pool: Pool;
+  membershipId: string;
+}
+
+export interface PoolStatusHistoryEntry {
+  id: number;
+  fromStatus: PoolStatus | null;
+  toStatus: PoolStatus;
+  actorUserId: string | null;
+  reason: string | null;
+  createdAt: string;
+}

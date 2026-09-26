@@ -22,16 +22,29 @@ export function AppLayout() {
     <div className="min-h-screen bg-neutral-50">
       <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <Link to="/p" className="font-bold text-neutral-900">
+          <Link to={user?.role === "DRIVER" ? "/d" : "/p"} className="font-bold text-neutral-900">
             Dhaka Tesla Pool
           </Link>
           <nav className="flex items-center gap-1">
-            <NavLink to="/p" end className={navLinkClass}>
-              Ride
-            </NavLink>
-            <NavLink to="/p/history" className={navLinkClass}>
-              History
-            </NavLink>
+            {user?.role === "DRIVER" ? (
+              <>
+                <NavLink to="/d" end className={navLinkClass}>
+                  Dashboard
+                </NavLink>
+                <NavLink to="/d/history" className={navLinkClass}>
+                  History
+                </NavLink>
+              </>
+            ) : (
+              <>
+                <NavLink to="/p" end className={navLinkClass}>
+                  Ride
+                </NavLink>
+                <NavLink to="/p/history" className={navLinkClass}>
+                  History
+                </NavLink>
+              </>
+            )}
             <span className="mx-2 text-sm text-neutral-400">{user?.name}</span>
             <button
               type="button"

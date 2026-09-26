@@ -64,7 +64,7 @@ Priority order from the brief, applied to every trade-off:
 | **P0 — must ship** | Everything in §0.2. Transaction-safe pooling with row locks + DB CHECK backstop. Centralised state machines. Idempotent critical mutations. Ownership authorization. Status history. Concurrency tests C1–C16 (§10.6). Docker Compose from clean clone. ADRs, ERD, diagrams, assumptions, limitations, scalability doc. |
 | **P1 — should ship** | Driver "no-show" removal at arrival. GitHub Actions CI. `scripts/race-demo.ts` (last-seat race on demand for the video). Public deployment. One Playwright E2E happy path. |
 | **P2 — could ship** | Simulated **TeslaPay** wallet with ledger (Cash is always available). Automatic expiry of stale `REQUESTED` rides. |
-| **Won't (documented in LIMITATIONS)** | Real maps/routing/GPS, real payment gateway, WebSockets, Redis, queues, microservices, admin panel, driver onboarding/KYC, ratings, push notifications. |
+| **Won't (documented in LIMITATIONS)** | Real maps/routing/GPS, real payment gateway, WebSockets, Redis, queues, microservices, driver onboarding/KYC (real identity verification), ratings, push notifications. A minimal admin role for driver-account creation was added later — see §13.2. |
 
 **Cut line:** if time runs short, cut P2, then Playwright, then deployment (fallback: reproducible Docker, as the PRD allows). **Never cut** concurrency tests, authorization tests, or the docs the PRD requires.
 
@@ -104,7 +104,7 @@ PRD requirement → decision → implementation location → test → documentat
 | R4 | Track status | Request state machine; polling | `api/src/domain/ride-state-machine.ts`, `web/src/features/passenger` | `ride-state-machine.unit`, `lifecycle.int` | ADR-007, §9 |
 | R5 | Ride history | Keyset-paginated list + per-ride status timeline | `api/src/modules/rides` | `ride-requests.int` (pagination) | §12 |
 | R6 | Cancel while valid | Cancellation policy + lock protocol | `api/src/domain/cancellation-policy.ts`, `modules/rides/cancel-ride-request.ts` | `cancellation.unit`, C4, C10 | §9.3 |
-| R7 | Driver sign in | Shared auth; drivers provisioned by seed | `modules/auth`, `db/seed` | `auth.int` | A3 |
+| R7 | Driver sign in | Shared auth; drivers provisioned by seed or by an admin | `modules/auth`, `db/seed`, `modules/admin` | `auth.int`, `admin.int` | A3, §13.2 |
 | R8 | Online / offline | Vehicle availability + current zone; vehicle row lock | `modules/driver/availability.ts` | `driver.int`, C6 | ADR-006 |
 | R9 | Tesla with fixed capacity | `vehicles.capacity` CHECK; pool `capacity_snapshot` | `db/schema.ts`, migration | `db-constraints.int`, C11 | ERD |
 | R10 | See relevant requests | Driver's current zone + compatibility with open pool | `modules/driver/list-relevant-requests.ts` | `driver.int` | §7 |
@@ -854,6 +854,8 @@ details carry the id of the existing ride so the UI can navigate to it.
 | `POST /driver/pools/:id/memberships/:mid/drop-off` | pool owner | opt | → pool | 404, 409 INVALID_TRANSITION |
 | `POST /driver/pools/:id/memberships/:mid/no-show` | pool owner | opt | → pool | 409 INVALID_TRANSITION |
 | `POST /driver/pools/:id/cancel` | pool owner | opt | `{reason}` → pool | 409 INVALID_TRANSITION |
+| `GET /admin/drivers` | admin | – | → driver accounts + vehicle | 403 |
+| `POST /admin/drivers` | admin | – | `{name, email, password, vehicleName, capacity, zone?}` → 201 driver + vehicle | 400, 403, 409 EMAIL_TAKEN |
 | `GET /healthz` | public | – | liveness, no DB | – |
 | `GET /readyz` | public | – | DB `SELECT 1` (1 s timeout) | 503 |
 
@@ -909,16 +911,19 @@ details carry the id of the existing ride so the UI can navigate to it.
 
 ### 13.2 Authorization matrix
 
-| Resource / action | Anonymous | Passenger (owner) | Passenger (other) | Driver (owner) | Driver (other) |
-|---|---|---|---|---|---|
-| register / login | ✅ | – | – | – | – |
-| zones | ✅ | ✅ | ✅ | ✅ | ✅ |
-| fare quote, create ride request | 401 | ✅ | ✅ | 403 | 403 |
-| read / history / offers / cancel ride request | 401 | ✅ | 404 | 403 | 403 |
-| join pool (with own request) | 401 | ✅ | 404 (request not theirs) | 403 | 403 |
-| go online/offline, relevant requests, accept | 401 | 403 | 403 | ✅ | ✅ (own vehicle only) |
-| read / arrive / start / drop-off / no-show / cancel pool | 401 | 403 | 403 | ✅ | 404 |
-| health | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Resource / action | Anonymous | Passenger (owner) | Passenger (other) | Driver (owner) | Driver (other) | Admin |
+|---|---|---|---|---|---|---|
+| register / login | ✅ | – | – | – | – | – |
+| zones | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| fare quote, create ride request | 401 | ✅ | ✅ | 403 | 403 | 403 |
+| read / history / offers / cancel ride request | 401 | ✅ | 404 | 403 | 403 | 403 |
+| join pool (with own request) | 401 | ✅ | 404 (request not theirs) | 403 | 403 | 403 |
+| go online/offline, relevant requests, accept | 401 | 403 | 403 | ✅ | ✅ (own vehicle only) | 403 |
+| read / arrive / start / drop-off / no-show / cancel pool | 401 | 403 | 403 | ✅ | 404 | 403 |
+| create / list driver accounts | 401 | 403 | 403 | 403 | 403 | ✅ |
+| health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+Admin is a fourth role, added after the initial MVP scope (A3 originally read "drivers are provisioned by seed, no admin panel" — reversed once the assessment needed a real way to onboard drivers besides hand-editing `db/seed`). Public `/auth/register` still only ever creates passengers; there is no self-serve path to DRIVER or ADMIN. Admin accounts are provisioned the same way the original DRIVER seed was: `db/seed/index.ts`.
 
 ### 13.3 Auth and platform hardening details
 

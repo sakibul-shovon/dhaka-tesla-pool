@@ -4,8 +4,25 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: "PASSENGER" | "DRIVER";
+  role: "PASSENGER" | "DRIVER" | "ADMIN";
   status: "ACTIVE" | "SUSPENDED";
+}
+
+export interface DriverVehicle {
+  id: string;
+  name: string;
+  capacity: number;
+  isOnline: boolean;
+  currentZone: string | null;
+}
+
+export interface Driver {
+  id: string;
+  name: string;
+  email: string;
+  status: "ACTIVE" | "SUSPENDED";
+  createdAt: string;
+  vehicle: DriverVehicle;
 }
 
 export type RideStatus = "REQUESTED" | "MATCHED" | "DRIVER_ARRIVED" | "STARTED" | "COMPLETED" | "CANCELLED";

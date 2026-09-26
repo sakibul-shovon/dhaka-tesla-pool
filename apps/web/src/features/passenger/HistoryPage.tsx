@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { api } from "../../lib/api-client.js";
+import { isColdStart } from "../../lib/polling.js";
 import type { RideRequest } from "../../lib/types.js";
 import { ErrorBanner } from "../../components/ui/ErrorBanner.js";
 import { Card } from "../../components/ui/Card.js";
@@ -36,6 +37,7 @@ export function HistoryPage() {
     return (
       <ErrorBanner
         message="We can't reach the server. Retry."
+        coldStart={isColdStart(query as never)}
         onRetry={() => void query.refetch()}
       />
     );

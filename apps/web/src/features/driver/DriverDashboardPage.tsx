@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Car, Inbox } from "lucide-react";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
-import { createRefetchInterval, POLL_BASE_MS } from "../../lib/polling.js";
+import { createRefetchInterval, isColdStart, POLL_BASE_MS } from "../../lib/polling.js";
 import { useZones } from "../../lib/zones.js";
 import type { AcceptResult, DriverStatus, RelevantRequest } from "../../lib/types.js";
 import { ErrorBanner } from "../../components/ui/ErrorBanner.js";
@@ -133,6 +133,7 @@ export function DriverDashboardPage() {
     return (
       <ErrorBanner
         message="We can't reach the server. Retry."
+        coldStart={isColdStart(statusQuery as never)}
         onRetry={() => void statusQuery.refetch()}
       />
     );

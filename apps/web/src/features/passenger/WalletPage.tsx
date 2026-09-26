@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, Plus, Wallet as WalletIcon } from "lucide-react";
 import { formatPaisaAsTaka, paisa } from "@dhaka-tesla-pool/shared";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
+import { isColdStart } from "../../lib/polling.js";
 import type { WalletSummary, WalletTransaction } from "../../lib/types.js";
 import { Card } from "../../components/ui/Card.js";
 import { Button } from "../../components/ui/Button.js";
@@ -19,7 +20,8 @@ function TopUpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [amountTaka, setAmountTaka] = useState("100");
   const amountPaisa = Math.round(Number(amountTaka) * 100);
-  const isValidAmount = Number.isFinite(amountPaisa) && amountPaisa > 0 && amountPaisa <= TOPUP_CAP_PAISA;
+  const isValidAmount =
+    Number.isFinite(amountPaisa) && amountPaisa > 0 && amountPaisa <= TOPUP_CAP_PAISA;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const intentKey = useMemo(() => crypto.randomUUID(), [amountPaisa]);
@@ -75,7 +77,9 @@ function TopUpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
         {topUp.isError && (
           <ErrorBanner
             message={
-              topUp.error instanceof ApiError ? messageForError(topUp.error.code, topUp.error.message) : "Something went wrong."
+              topUp.error instanceof ApiError
+                ? messageForError(topUp.error.code, topUp.error.message)
+                : "Something went wrong."
             }
           />
         )}
@@ -97,11 +101,17 @@ function TransactionRow({ transaction }: { transaction: WalletTransaction }) {
           (isTopUp ? "bg-success-soft text-success" : "bg-surface-raised text-text-muted")
         }
       >
-        {isTopUp ? <ArrowDownLeft size={15} strokeWidth={2.25} /> : <ArrowUpRight size={15} strokeWidth={2.25} />}
+        {isTopUp ? (
+          <ArrowDownLeft size={15} strokeWidth={2.25} />
+        ) : (
+          <ArrowUpRight size={15} strokeWidth={2.25} />
+        )}
       </span>
       <div className="flex-1">
         <p className="text-sm font-medium text-text">{isTopUp ? "Top-up" : "Ride payment"}</p>
-        <p className="text-xs text-text-faint">{new Date(transaction.createdAt).toLocaleString()}</p>
+        <p className="text-xs text-text-faint">
+          {new Date(transaction.createdAt).toLocaleString()}
+        </p>
       </div>
       <span className={"tabular text-sm font-semibold " + (isTopUp ? "text-success" : "text-text")}>
         {isTopUp ? "+" : "−"}
@@ -133,7 +143,13 @@ export function WalletPage() {
   }
 
   if (walletQuery.isError) {
-    return <ErrorBanner message="We can't reach the server. Retry." onRetry={() => void walletQuery.refetch()} />;
+    return (
+      <ErrorBanner
+        message="We can't reach the server. Retry."
+        coldStart={isColdStart(walletQuery as never)}
+        onRetry={() => void walletQuery.refetch()}
+      />
+    );
   }
 
   return (
@@ -165,7 +181,11 @@ export function WalletPage() {
           <p className="mt-2 text-sm text-text-muted">Couldn't load transactions.</p>
         ) : transactionsQuery.data.length === 0 ? (
           <div className="mt-3">
-            <EmptyState icon={WalletIcon} title="No activity yet" description="Top up or pay for a ride with TeslaPay to see it here." />
+            <EmptyState
+              icon={WalletIcon}
+              title="No activity yet"
+              description="Top up or pay for a ride with TeslaPay to see it here."
+            />
           </div>
         ) : (
           <ul className="mt-1">

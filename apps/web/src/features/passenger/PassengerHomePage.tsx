@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import { Banknote, Minus, Plus, Wallet as WalletIcon } from "lucide-react";
 import { formatPaisaAsTaka, paisa } from "@dhaka-tesla-pool/shared";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
+import { isColdStart } from "../../lib/polling.js";
 import { useZones } from "../../lib/zones.js";
 import {
   ACTIVE_RIDE_STATUSES,
@@ -123,6 +124,7 @@ export function PassengerHomePage() {
     return (
       <ErrorBanner
         message="We can't reach the server. Retry."
+        coldStart={isColdStart(recentRidesQuery as never) || isColdStart(zonesQuery as never)}
         onRetry={() => {
           void recentRidesQuery.refetch();
           void zonesQuery.refetch();

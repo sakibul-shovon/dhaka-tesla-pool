@@ -178,6 +178,49 @@ describe("pool_memberships constraints", () => {
   });
 });
 
+describe("wallet_transactions constraints (plan §8.4)", () => {
+  it("prevents a double debit for the same ride request", async () => {
+    const passengerId = await insertUser();
+    const rideRequestId = await insertRideRequest(passengerId, "COMPLETED");
+    await pool.query(`INSERT INTO wallets (user_id, balance_paisa) VALUES ($1, 100000)`, [passengerId]);
+
+    await pool.query(
+      `INSERT INTO wallet_transactions (wallet_user_id, type, amount_paisa, ride_request_id) VALUES ($1, 'DEBIT', 6750, $2)`,
+      [passengerId, rideRequestId],
+    );
+
+    await expect(
+      pool.query(
+        `INSERT INTO wallet_transactions (wallet_user_id, type, amount_paisa, ride_request_id) VALUES ($1, 'DEBIT', 6750, $2)`,
+        [passengerId, rideRequestId],
+      ),
+    ).rejects.toThrow(/wallet_transactions_ride_request_type_unique/);
+  });
+
+  it("still allows any number of top-ups (NULL ride_request_id never collides)", async () => {
+    const passengerId = await insertUser();
+    await pool.query(`INSERT INTO wallets (user_id) VALUES ($1)`, [passengerId]);
+
+    await pool.query(`INSERT INTO wallet_transactions (wallet_user_id, type, amount_paisa) VALUES ($1, 'TOPUP', 50000)`, [
+      passengerId,
+    ]);
+    await expect(
+      pool.query(`INSERT INTO wallet_transactions (wallet_user_id, type, amount_paisa) VALUES ($1, 'TOPUP', 30000)`, [
+        passengerId,
+      ]),
+    ).resolves.not.toThrow();
+  });
+
+  it("rejects a negative wallet balance", async () => {
+    const passengerId = await insertUser();
+    await pool.query(`INSERT INTO wallets (user_id, balance_paisa) VALUES ($1, 100)`, [passengerId]);
+
+    await expect(
+      pool.query(`UPDATE wallets SET balance_paisa = -1 WHERE user_id = $1`, [passengerId]),
+    ).rejects.toThrow(/wallets_balance_nonneg/);
+  });
+});
+
 describe("idempotency_keys constraints", () => {
   it("rejects a key longer than 64 characters", async () => {
     const userId = await insertUser();

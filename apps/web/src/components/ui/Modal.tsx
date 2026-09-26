@@ -3,9 +3,13 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 // Generic confirm/detail dialog (plan §6: e.g. "confirm before cancel ride").
-// Keyboard/focus handling is intentionally minimal but real: Escape closes,
-// the panel takes focus on open so Escape works immediately.
+// Escape closes; the panel takes focus on open so Escape works immediately;
+// Tab/Shift+Tab is trapped inside the panel so a keyboard user can't tab
+// into the page underneath a modal that's covering it.
 export function Modal({
   open,
   onClose,
@@ -24,7 +28,22 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
     document.addEventListener("keydown", handleKeyDown);
     panelRef.current?.focus();
@@ -34,7 +53,10 @@ export function Modal({
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center" role="presentation">
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+          role="presentation"
+        >
           <motion.div
             className="absolute inset-0 bg-text/40"
             initial={{ opacity: 0 }}

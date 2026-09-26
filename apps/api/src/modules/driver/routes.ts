@@ -15,6 +15,7 @@ import {
 } from "../../lib/idempotency.js";
 import { isUniqueViolation } from "../../lib/pg-errors.js";
 import { runInTransaction } from "../../lib/transaction.js";
+import { logBusinessEvent } from "../../lib/business-events.js";
 import { createLockOrderGuard, lockRideRequestsByIds, lockVehicleByDriverId } from "../../lib/lock-order.js";
 import { markLocked } from "../../domain-writes/locked.js";
 import {
@@ -197,6 +198,7 @@ export function driverRouter(db: Db): Router {
       const rideRequestId = requireIdParam(req.params.id);
       const driverId = req.user!.id;
       const fingerprint = fingerprintRequest("POST", ROUTE.accept, {});
+      let poolWasCreated = false;
 
       const { replayed, status, body } = await runInTransaction(db, async (tx) => {
         const claim = await claimIdempotencyKey(tx, driverId, {
@@ -222,6 +224,7 @@ export function driverRouter(db: Db): Router {
           ? await lockPoolForDriver(tx, existingOpen.id, driverId, guard)
           : await (async () => {
               guard.assert("pool");
+              poolWasCreated = true;
               try {
                 const created = await insertPool(tx, {
                   vehicleId: lockedVehicle.id,
@@ -270,9 +273,22 @@ export function driverRouter(db: Db): Router {
 
       if (replayed) {
         res.setHeader(IDEMPOTENT_REPLAYED_HEADER, "true");
+      } else {
+        const poolId = (body as { pool: { id: string } }).pool.id;
+        if (poolWasCreated) {
+          logBusinessEvent(req.log, "pool.created", { poolId, driverId });
+        }
+        logBusinessEvent(req.log, "pool.seat_reserved", { poolId, rideRequestId, command: "accept" });
       }
       sendData(res, status, body);
     } catch (err) {
+      if (err instanceof HttpError && err.code === "POOL_CAPACITY_EXCEEDED") {
+        logBusinessEvent(req.log, "pool.capacity_conflict", {
+          rideRequestId: req.params.id,
+          driverId: req.user?.id,
+          command: "accept",
+        });
+      }
       next(err);
     }
   });

@@ -11,6 +11,7 @@ import { requireRole } from "../../http/middleware/role-guard.js";
 import { decodeCursor, encodeCursor } from "../../http/pagination.js";
 import { sendData, sendPage } from "../../http/response.js";
 import { firstNameOf } from "../../lib/names.js";
+import { logBusinessEvent } from "../../lib/business-events.js";
 import {
   claimIdempotencyKey,
   finalizeIdempotencyKey,
@@ -152,6 +153,8 @@ export function ridesRouter(db: Db): Router {
 
       if (replayed) {
         res.setHeader(IDEMPOTENT_REPLAYED_HEADER, "true");
+      } else {
+        logBusinessEvent(req.log, "ride.requested", { rideRequestId: (body as { id: string }).id });
       }
       sendData(res, status, body);
     } catch (err) {
@@ -324,6 +327,8 @@ export function ridesRouter(db: Db): Router {
 
       if (replayed) {
         res.setHeader(IDEMPOTENT_REPLAYED_HEADER, "true");
+      } else {
+        logBusinessEvent(req.log, "ride.cancelled", { rideRequestId });
       }
       sendData(res, status, body);
     } catch (err) {

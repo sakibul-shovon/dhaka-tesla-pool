@@ -14,6 +14,7 @@ import {
   requireIdempotencyKey,
 } from "../../lib/idempotency.js";
 import { runInTransaction } from "../../lib/transaction.js";
+import { logBusinessEvent } from "../../lib/business-events.js";
 import { createLockOrderGuard, lockPoolById } from "../../lib/lock-order.js";
 import { lockRideRequestForOwner, toRideRequestDTO, findRideRequestByOwner } from "../rides/repository.js";
 import { reserveSeat } from "./seat-reservation.js";
@@ -105,9 +106,18 @@ export function passengerPoolsRouter(db: Db): Router {
 
       if (replayed) {
         res.setHeader(IDEMPOTENT_REPLAYED_HEADER, "true");
+      } else {
+        logBusinessEvent(req.log, "pool.seat_reserved", { poolId, passengerId, command: "join" });
       }
       sendData(res, status, body);
     } catch (err) {
+      if (err instanceof HttpError && err.code === "POOL_CAPACITY_EXCEEDED") {
+        logBusinessEvent(req.log, "pool.capacity_conflict", {
+          poolId: req.params.id,
+          passengerId: req.user?.id,
+          command: "join",
+        });
+      }
       next(err);
     }
   });

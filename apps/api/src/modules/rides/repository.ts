@@ -110,10 +110,18 @@ export async function lockRideRequestForOwner(
   id: string,
   passengerId: string,
   guard: LockOrderGuard,
-): Promise<Locked<{ id: string; status: RideStatus; seats: number }> | undefined> {
+): Promise<
+  Locked<{ id: string; status: RideStatus; seats: number; pickupZone: string; dropoffZone: string }> | undefined
+> {
   guard.assert("requests");
   const [row] = await tx
-    .select({ id: rideRequests.id, status: rideRequests.status, seats: rideRequests.seats })
+    .select({
+      id: rideRequests.id,
+      status: rideRequests.status,
+      seats: rideRequests.seats,
+      pickupZone: rideRequests.pickupZone,
+      dropoffZone: rideRequests.dropoffZone,
+    })
     .from(rideRequests)
     .where(and(eq(rideRequests.id, id), eq(rideRequests.passengerId, passengerId)))
     .for("update");

@@ -75,7 +75,9 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      # 127.0.0.1, not localhost — see apps/web/Dockerfile's own healthcheck
+      # for why busybox wget + "localhost" is a false-negative here.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
       interval: 5s
       timeout: 3s
       retries: 10

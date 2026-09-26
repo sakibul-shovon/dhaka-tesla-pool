@@ -17,7 +17,13 @@
 
   --color-text: #241c13;
   --color-text-muted: #6e6455;
-  --color-text-faint: #a79c88;
+  /* Verified against WCAG AA by computing contrast ratios directly (no
+     browser devtools in this environment) — text-faint originally landed at
+     2.53:1 on --color-bg, well under even the 3:1 large-text floor, since it
+     was carried over from a dark-theme value without re-checking. Every
+     text-on-*-soft pair below was checked the same way and darkened where
+     it fell short of 4.5:1. */
+  --color-text-faint: #7d7566;
 
   /* amber carries the brand equity from the original MVP palette across two
      design iterations now, recalibrated for text/fills on a light surface
@@ -27,14 +33,14 @@
   --color-accent-strong: #96540a;
   --color-accent-soft: #fbeacb;
   --color-on-accent: var(--color-text);
-  --color-electric: #0e7a6e;
+  --color-electric: #0b675d;
   --color-electric-soft: #dcf0ec;
 
-  --color-success: #1f9d6b;
+  --color-success: #177550;
   --color-success-soft: #dff3e8;
-  --color-warning: #8a6d00;
+  --color-warning: #755c00;
   --color-warning-soft: #fbf1ce;
-  --color-danger: #c4432c;
+  --color-danger: #a63825;
   --color-danger-soft: #fbe5df;
 
   --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;

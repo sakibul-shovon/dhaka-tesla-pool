@@ -21,6 +21,7 @@ import {
   findOpenPoolForVehicle,
   findPoolByIdForDriver,
   insertPool,
+  insertPoolCreationHistory,
   listUnreleasedMembers,
   lockPoolForDriver,
   toPoolDTO,
@@ -228,6 +229,7 @@ export function driverRouter(db: Db): Router {
                   pickupZone: lockedVehicle.currentZone!,
                   capacitySnapshot: lockedVehicle.capacity,
                 });
+                await insertPoolCreationHistory(tx, created.id, driverId);
                 return markLocked(created);
               } catch (err) {
                 if (isUniqueViolation(err, "pools_active_per_vehicle")) {

@@ -59,6 +59,20 @@ export async function insertPool(
   return row!;
 }
 
+// Not routed through applyPoolTransition: there is no locked "from" row to
+// transition — this *is* the pool's first row (mirrors rides/repository.ts's
+// insertCreationHistory). Without this, I14 (plan §10.7 — "latest history
+// row matches current status") would fail for every pool from the moment
+// it's created until its first real transition.
+export async function insertPoolCreationHistory(tx: Tx, poolId: string, actorUserId: string): Promise<void> {
+  await tx.insert(poolStatusHistory).values({
+    poolId,
+    fromStatus: null,
+    toStatus: "OPEN",
+    actorUserId,
+  });
+}
+
 // Scoped by owner in the WHERE clause (CLAUDE.md: "every query on
 // user-owned data is scoped by the caller") — Monir locking Jashim's pool
 // id finds no row and gets the same 404 as a pool that doesn't exist.

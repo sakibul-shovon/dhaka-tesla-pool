@@ -37,6 +37,7 @@ export const poolStatusEnum = pgEnum("pool_status", [
   "COMPLETED",
   "CANCELLED",
 ]);
+export const walletTransactionTypeEnum = pgEnum("wallet_transaction_type", ["TOPUP", "DEBIT"]);
 
 // Reference data: the 10-zone grid (§7.1) — rows inserted by a migration, not the app seed.
 export const zones = pgTable("zones", {
@@ -281,5 +282,46 @@ export const idempotencyKeys = pgTable(
     primaryKey({ columns: [table.userId, table.key] }),
     index("idempotency_keys_created_at").on(table.createdAt),
     check("idempotency_keys_key_length", sql`char_length(${table.key}) <= 64`),
+  ],
+);
+
+// TeslaPay (plan §8.4, P2) — a simulated wallet. Lazily created (a row only
+// exists once a user has topped up or paid with it); most users never touch
+// this, since CASH is always available.
+export const wallets = pgTable(
+  "wallets",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "restrict" }),
+    balancePaisa: integer("balance_paisa").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [check("wallets_balance_nonneg", sql`${table.balancePaisa} >= 0`)],
+);
+
+export const WALLET_TRANSACTIONS_RIDE_REQUEST_TYPE_UNIQUE = "wallet_transactions_ride_request_type_unique";
+
+// UNIQUE(ride_request_id, type) is the double-debit backstop (plan §8.4):
+// every DEBIT row carries the ride it paid for, so a second DEBIT attempt
+// for the same ride collides on this index. TOPUP rows always have a NULL
+// ride_request_id, and Postgres treats each NULL as distinct, so any number
+// of top-ups is still allowed.
+export const walletTransactions = pgTable(
+  "wallet_transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    walletUserId: uuid("wallet_user_id")
+      .notNull()
+      .references(() => wallets.userId, { onDelete: "restrict" }),
+    type: walletTransactionTypeEnum("type").notNull(),
+    amountPaisa: integer("amount_paisa").notNull(),
+    rideRequestId: uuid("ride_request_id").references(() => rideRequests.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex(WALLET_TRANSACTIONS_RIDE_REQUEST_TYPE_UNIQUE).on(table.rideRequestId, table.type),
+    check("wallet_transactions_amount_positive", sql`${table.amountPaisa} > 0`),
+    index("wallet_transactions_by_wallet").on(table.walletUserId, table.createdAt.desc()),
   ],
 );

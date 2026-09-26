@@ -1,8 +1,5 @@
 // Mirrors the DTOs the API actually returns (apps/api/src/modules/*/repository.ts
-// toXDTO functions) — not the full plan §12.2 contract, since the backend
-// doesn't expose pool/vehicle/driver fields on a passenger's ride yet
-// (feature/ride-requests' documented deviation; still true as of this
-// session — see this branch's session report).
+// toXDTO functions), not the full plan §12.2 contract verbatim.
 export interface User {
   id: string;
   name: string;
@@ -29,6 +26,31 @@ export interface RideRequest {
   startedAt: string | null;
   completedAt: string | null;
   cancelledAt: string | null;
+  pool: PoolSummaryForRide | null;
+}
+
+// The pool a passenger's own ride belongs to, once matched (plan §15.2's
+// pool card: "Bullet · Jashim · 2/3 seats · shared with 1 rider").
+export interface PoolSummaryForRide {
+  poolId: string;
+  vehicleName: string;
+  driverFirstName: string;
+  status: PoolStatus;
+  capacitySnapshot: number;
+  seatsReserved: number;
+  sharedWithCount: number;
+}
+
+// A compatible OPEN pool a passenger's unmatched request could join
+// directly (plan §12.2's `GET /ride-requests/:id/pool-offers`).
+export interface PoolOffer {
+  poolId: string;
+  vehicleName: string;
+  driverFirstName: string;
+  seatsLeft: number;
+  sharedWithCount: number;
+  soloFarePaisa: number;
+  pooledFarePaisa: number;
 }
 
 export interface RideStatusHistoryEntry {

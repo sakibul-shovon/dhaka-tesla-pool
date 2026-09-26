@@ -63,6 +63,17 @@ async function driverContext(name = "Jashim"): Promise<PassengerContext> {
   return { userId: row!.id, cookie: `${SESSION_COOKIE_NAME}=${token}` };
 }
 
+// Unlike driverContext above, this one has an online vehicle — the minimum
+// needed to accept a ride request (used only by the pool-summary tests).
+async function onlineDriverContext(name = "Jashim"): Promise<PassengerContext> {
+  const driver = await driverContext(name);
+  await pool.query(
+    `INSERT INTO vehicles (driver_id, name, capacity, is_online, current_zone) VALUES ($1, 'Bullet', 3, true, 'BANANI')`,
+    [driver.userId],
+  );
+  return driver;
+}
+
 const NUSRAT_TRIP = { pickupZone: "BANANI", dropoffZone: "MOHAKHALI", seats: 1, paymentMethod: "CASH" as const };
 
 function createRideRequest(
@@ -222,6 +233,39 @@ describe("GET /ride-requests/:id and /:id/history (plan §12.2)", () => {
     const res = await request(app).get(`/api/v1/ride-requests/${randomUUID()}`).set("Cookie", cookie);
 
     expect(res.status).toBe(404);
+  });
+
+  it("includes a null pool while the request is still unmatched", async () => {
+    const app = buildTestApp(pool, logger);
+    const { cookie } = await passengerContext();
+    const created = await createRideRequest(app, cookie);
+
+    const res = await request(app).get(`/api/v1/ride-requests/${created.body.data.id}`).set("Cookie", cookie);
+
+    expect(res.body.data.pool).toBeNull();
+  });
+
+  it("includes the pool summary once the request has been matched", async () => {
+    const app = buildTestApp(pool, logger);
+    const jashim = await onlineDriverContext();
+    const { cookie } = await passengerContext();
+    const created = await createRideRequest(app, cookie);
+    await request(app)
+      .post(`/api/v1/driver/requests/${created.body.data.id}/accept`)
+      .set("Cookie", jashim.cookie)
+      .set("Idempotency-Key", randomUUID())
+      .send({});
+
+    const res = await request(app).get(`/api/v1/ride-requests/${created.body.data.id}`).set("Cookie", cookie);
+
+    expect(res.body.data.pool).toMatchObject({
+      vehicleName: "Bullet",
+      driverFirstName: "Jashim",
+      status: "OPEN",
+      capacitySnapshot: 3,
+      seatsReserved: 1,
+      sharedWithCount: 0,
+    });
   });
 });
 

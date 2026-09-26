@@ -1,8 +1,9 @@
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client.js";
-import { pools, poolMemberships, poolStatusHistory, rideRequests, users } from "../../db/schema.js";
+import { pools, poolMemberships, poolStatusHistory, rideRequests, users, vehicles } from "../../db/schema.js";
 import { ACTIVE_POOL_STATUSES, type PoolStatus } from "../../domain/pool-state-machine.js";
 import { markLocked, type Locked } from "../../domain-writes/locked.js";
+import { firstNameOf } from "../../lib/names.js";
 import { type LockOrderGuard } from "../../lib/lock-order.js";
 
 export type PoolRow = typeof pools.$inferSelect;
@@ -298,6 +299,86 @@ export async function listPoolsForDriver(db: Db, params: ListPoolsParams): Promi
     .where(and(...conditions))
     .orderBy(desc(pools.createdAt), desc(pools.id))
     .limit(params.limit + 1);
+}
+
+// A candidate pool for a passenger's pool-offers listing (plan §12.2's
+// `GET /ride-requests/:id/pool-offers`) — deliberately not owner-scoped,
+// since any passenger may see any OPEN pool in their pickup zone.
+export interface OpenPoolCandidateRow {
+  poolId: string;
+  pickupZone: string;
+  vehicleName: string;
+  driverName: string;
+  capacitySnapshot: number;
+  seatsReserved: number;
+}
+
+export async function listOpenPoolsInZone(db: Db, pickupZone: string): Promise<OpenPoolCandidateRow[]> {
+  return db
+    .select({
+      poolId: pools.id,
+      pickupZone: pools.pickupZone,
+      vehicleName: vehicles.name,
+      driverName: users.name,
+      capacitySnapshot: pools.capacitySnapshot,
+      seatsReserved: pools.seatsReserved,
+    })
+    .from(pools)
+    .innerJoin(vehicles, eq(vehicles.id, pools.vehicleId))
+    .innerJoin(users, eq(users.id, pools.driverId))
+    .where(and(eq(pools.status, "OPEN"), eq(pools.pickupZone, pickupZone)));
+}
+
+export interface PoolSummaryForRequest {
+  poolId: string;
+  vehicleName: string;
+  driverName: string;
+  status: PoolStatus;
+  capacitySnapshot: number;
+  seatsReserved: number;
+  sharedWithCount: number;
+}
+
+// The pool summary shown on a passenger's own ride (plan §12.2's
+// `GET /ride-requests/:id`, §15.2's pool card) — `undefined` once the
+// request was never matched, or its membership has since been released.
+export async function findPoolSummaryForRideRequest(
+  db: Db | Tx,
+  rideRequestId: string,
+): Promise<PoolSummaryForRequest | undefined> {
+  const [row] = await db
+    .select({
+      poolId: pools.id,
+      vehicleName: vehicles.name,
+      driverName: users.name,
+      status: pools.status,
+      capacitySnapshot: pools.capacitySnapshot,
+      seatsReserved: pools.seatsReserved,
+    })
+    .from(poolMemberships)
+    .innerJoin(pools, eq(pools.id, poolMemberships.poolId))
+    .innerJoin(vehicles, eq(vehicles.id, pools.vehicleId))
+    .innerJoin(users, eq(users.id, pools.driverId))
+    .where(and(eq(poolMemberships.rideRequestId, rideRequestId), isNull(poolMemberships.releasedAt)))
+    .limit(1);
+  if (!row) {
+    return undefined;
+  }
+
+  const members = await listUnreleasedMembers(db, row.poolId);
+  return { ...row, sharedWithCount: Math.max(0, members.length - 1) };
+}
+
+export function toPoolSummaryDTO(row: PoolSummaryForRequest) {
+  return {
+    poolId: row.poolId,
+    vehicleName: row.vehicleName,
+    driverFirstName: firstNameOf(row.driverName),
+    status: row.status,
+    capacitySnapshot: row.capacitySnapshot,
+    seatsReserved: row.seatsReserved,
+    sharedWithCount: row.sharedWithCount,
+  };
 }
 
 export { ACTIVE_POOL_STATUSES };

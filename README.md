@@ -419,6 +419,10 @@ all demo accounts is the value of `DEMO_PASSWORD` in your `.env` (`dhaka-tesla-d
 | Passenger | Rafiq | `rafiq@dhakateslapool.test` |
 | Passenger | Shirin | `shirin@dhakateslapool.test` |
 
+Wiped out the demo state experimenting? `npm run db:reset --workspace=apps/api` truncates every business
+table and reseeds this exact cast from scratch — the same command a demo recording runs right before
+hitting record, so every take starts from an identical, known state.
+
 ## Deployment
 
 Design and free-tier provider decisions are in

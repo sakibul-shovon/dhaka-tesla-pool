@@ -14,7 +14,6 @@ function getInitials(name?: string): string {
   const parts = name.trim().split(/\s+/);
   return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "?";
 }
-  "rounded px-3 py-1.5 text-sm font-medium " + (isActive ? "bg-amber-50 text-amber-700" : "text-neutral-600 hover:text-neutral-900");
 
 export function AppLayout() {
   const { user } = useAuth();
@@ -33,13 +32,12 @@ export function AppLayout() {
       <header className="sticky top-0 z-10 border-b border-border bg-bg/85 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
           <Link
-            to={user?.role === "DRIVER" ? "/d" : "/p"}
+            to={homePathForRole(user?.role ?? "PASSENGER")}
             className="flex items-center gap-2 font-display font-semibold text-text"
           >
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft text-accent-strong">
               <Zap size={16} strokeWidth={2.5} fill="currentColor" />
             </span>
-          <Link to={homePathForRole(user?.role ?? "PASSENGER")} className="font-bold text-neutral-900">
             Dhaka Tesla Pool
           </Link>
           <nav className="flex items-center gap-1">

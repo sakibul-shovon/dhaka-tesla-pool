@@ -57,7 +57,7 @@ function MemberRow({
               type="button"
               onClick={() => dropOff.mutate()}
               disabled={dropOff.isPending}
-              className="rounded bg-[--color-accent] px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
+              className="rounded bg-accent px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
             >
               Drop off
             </button>
@@ -165,7 +165,7 @@ export function DriverPoolPage() {
               type="button"
               onClick={() => arrive.mutate()}
               disabled={arrive.isPending}
-              className="rounded bg-[--color-accent] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               {arrive.isPending ? "Marking arrived…" : "I've arrived"}
             </button>
@@ -175,7 +175,7 @@ export function DriverPoolPage() {
               type="button"
               onClick={() => start.mutate()}
               disabled={start.isPending}
-              className="rounded bg-[--color-accent] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               {start.isPending ? "Starting…" : "Start trip"}
             </button>

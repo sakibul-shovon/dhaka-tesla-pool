@@ -74,7 +74,7 @@ export function LoginPage() {
         <button
           type="submit"
           disabled={login.isPending}
-          className="w-full rounded bg-[--color-accent] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="w-full rounded bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
           {login.isPending ? "Signing in…" : "Sign in"}
         </button>
@@ -82,7 +82,7 @@ export function LoginPage() {
 
       <p className="mt-4 text-center text-sm text-neutral-500">
         New here?{" "}
-        <Link to="/register" className="font-medium text-[--color-accent] underline">
+        <Link to="/register" className="font-medium text-accent underline">
           Create an account
         </Link>
       </p>

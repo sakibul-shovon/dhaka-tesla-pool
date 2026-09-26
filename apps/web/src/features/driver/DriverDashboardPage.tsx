@@ -36,7 +36,7 @@ function GoOnlineForm({ onGoOnline, isPending }: { onGoOnline: (zone: string) =>
       <button
         type="submit"
         disabled={isPending || !zone}
-        className="rounded bg-[--color-accent] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        className="rounded bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
       >
         {isPending ? "Going online…" : "Go online"}
       </button>
@@ -74,7 +74,7 @@ function RequestRow({ request }: { request: RelevantRequest }) {
           type="button"
           onClick={() => accept.mutate()}
           disabled={accept.isPending}
-          className="flex-none rounded bg-[--color-accent] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+          className="flex-none rounded bg-accent px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
         >
           {accept.isPending ? "Accepting…" : "Accept"}
         </button>
@@ -167,7 +167,7 @@ export function DriverDashboardPage() {
       {status.activePoolId && (
         <Link
           to={`/d/pools/${status.activePoolId}`}
-          className="block rounded-lg border border-[--color-accent] bg-[--color-accent-light] p-4 text-sm font-medium text-neutral-900"
+          className="block rounded-lg border border-accent bg-accent-soft p-4 text-sm font-medium text-neutral-900"
         >
           View active pool →
         </Link>

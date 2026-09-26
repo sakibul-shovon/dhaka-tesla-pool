@@ -180,10 +180,15 @@ describe("seeded demo cast", () => {
     const jashim = await request(app)
       .post("/api/v1/auth/login")
       .send({ email: "jashim@dhakateslapool.test", password: demoPassword });
+    const admin = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ email: "admin@dhakateslapool.test", password: demoPassword });
 
     expect(nusrat.status).toBe(200);
     expect(nusrat.body.data.role).toBe("PASSENGER");
     expect(jashim.status).toBe(200);
     expect(jashim.body.data.role).toBe("DRIVER");
+    expect(admin.status).toBe(200);
+    expect(admin.body.data.role).toBe("ADMIN");
   });
 });

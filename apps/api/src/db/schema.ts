@@ -19,7 +19,7 @@ import {
 // Enums and tables mirror docs/IMPLEMENTATION_PLAN.md §5.2 (ERD) and §6
 // (invariants) exactly — every CHECK/index/FK here is cited there.
 
-export const userRoleEnum = pgEnum("user_role", ["PASSENGER", "DRIVER"]);
+export const userRoleEnum = pgEnum("user_role", ["PASSENGER", "DRIVER", "ADMIN"]);
 export const accountStatusEnum = pgEnum("account_status", ["ACTIVE", "SUSPENDED"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["CASH", "TESLAPAY"]);
 export const rideStatusEnum = pgEnum("ride_status", [

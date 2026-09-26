@@ -14,7 +14,7 @@ export interface UserContext {
   cookie: string;
 }
 
-async function insertUser(pool: Pool, role: "PASSENGER" | "DRIVER", name: string): Promise<string> {
+async function insertUser(pool: Pool, role: "PASSENGER" | "DRIVER" | "ADMIN", name: string): Promise<string> {
   const {
     rows: [row],
   } = await pool.query<{ id: string }>(
@@ -26,6 +26,12 @@ async function insertUser(pool: Pool, role: "PASSENGER" | "DRIVER", name: string
 
 export async function passengerContext(pool: Pool, db: Db, name = "Nusrat"): Promise<UserContext> {
   const userId = await insertUser(pool, "PASSENGER", name);
+  const { token } = await createSession(db, userId, 1);
+  return { userId, cookie: `${SESSION_COOKIE_NAME}=${token}` };
+}
+
+export async function adminContext(pool: Pool, db: Db, name = "Admin"): Promise<UserContext> {
+  const userId = await insertUser(pool, "ADMIN", name);
   const { token } = await createSession(db, userId, 1);
   return { userId, cookie: `${SESSION_COOKIE_NAME}=${token}` };
 }

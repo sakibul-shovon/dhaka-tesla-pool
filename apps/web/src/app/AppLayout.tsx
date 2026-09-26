@@ -2,9 +2,10 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client.js";
 import { useAuth } from "./auth-context.js";
+import { homePathForRole } from "./roles.js";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  "rounded px-3 py-1.5 text-sm font-medium " + (isActive ? "bg-[--color-accent-light] text-[--color-accent]" : "text-neutral-600 hover:text-neutral-900");
+  "rounded px-3 py-1.5 text-sm font-medium " + (isActive ? "bg-amber-50 text-amber-700" : "text-neutral-600 hover:text-neutral-900");
 
 export function AppLayout() {
   const { user } = useAuth();
@@ -22,11 +23,11 @@ export function AppLayout() {
     <div className="min-h-screen bg-neutral-50">
       <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <Link to={user?.role === "DRIVER" ? "/d" : "/p"} className="font-bold text-neutral-900">
+          <Link to={homePathForRole(user?.role ?? "PASSENGER")} className="font-bold text-neutral-900">
             Dhaka Tesla Pool
           </Link>
           <nav className="flex items-center gap-1">
-            {user?.role === "DRIVER" ? (
+            {user?.role === "DRIVER" && (
               <>
                 <NavLink to="/d" end className={navLinkClass}>
                   Dashboard
@@ -35,7 +36,13 @@ export function AppLayout() {
                   History
                 </NavLink>
               </>
-            ) : (
+            )}
+            {user?.role === "ADMIN" && (
+              <NavLink to="/a" end className={navLinkClass}>
+                Drivers
+              </NavLink>
+            )}
+            {user?.role === "PASSENGER" && (
               <>
                 <NavLink to="/p" end className={navLinkClass}>
                   Ride

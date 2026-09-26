@@ -2,7 +2,7 @@ import { useState, type ComponentType } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { Car, Clock, LogOut, Menu, Users, X, Zap } from "lucide-react";
+import { Car, Clock, LogOut, Menu, Users, Wallet, X, Zap } from "lucide-react";
 import { api } from "../lib/api-client.js";
 import { useAuth } from "./auth-context.js";
 import { homePathForRole } from "./roles.js";
@@ -26,6 +26,7 @@ function navItemsForRole(role: string | undefined): NavItem[] {
   }
   return [
     { to: "/p", label: "Ride", Icon: Car, end: true },
+    { to: "/p/wallet", label: "Wallet", Icon: Wallet },
     { to: "/p/history", label: "History", Icon: Clock },
   ];
 }

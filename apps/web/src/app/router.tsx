@@ -10,6 +10,7 @@ import { RegisterPage } from "../features/auth/RegisterPage.js";
 import { PassengerHomePage } from "../features/passenger/PassengerHomePage.js";
 import { RidePage } from "../features/passenger/RidePage.js";
 import { HistoryPage } from "../features/passenger/HistoryPage.js";
+import { WalletPage } from "../features/passenger/WalletPage.js";
 import { DriverDashboardPage } from "../features/driver/DriverDashboardPage.js";
 import { DriverPoolPage } from "../features/driver/DriverPoolPage.js";
 import { DriverHistoryPage } from "../features/driver/DriverHistoryPage.js";
@@ -135,6 +136,7 @@ export function AppRouter() {
       >
         <Route index element={<PassengerHomePage />} />
         <Route path="rides/:id" element={<RidePage />} />
+        <Route path="wallet" element={<WalletPage />} />
         <Route path="history" element={<HistoryPage />} />
       </Route>
 

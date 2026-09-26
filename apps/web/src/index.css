@@ -1,10 +1,108 @@
 @import "tailwindcss";
 
-:root {
-  --color-accent: #b45309; /* amber-700 — the one accent color (plan visual direction) */
-  --color-accent-light: #fef3c7; /* amber-100 */
+/* "Electric Night" — dark EV-cockpit palette. Single theme on purpose (no
+   light/dark toggle for this MVP); see README's Next improvements. */
+@theme {
+  --color-bg: #0a0b0e;
+  --color-surface: #15171c;
+  --color-surface-raised: #1c1f26;
+  --color-border: #262a33;
+  --color-border-strong: #363c48;
+
+  --color-text: #f2f3f5;
+  --color-text-muted: #9aa1ad;
+  --color-text-faint: #5c6470;
+
+  /* amber carries the brand equity from the original MVP palette, deepened
+     for a dark surface; electric cyan is the secondary/route-line accent. */
+  --color-accent: #f5a623;
+  --color-accent-strong: #ffb84d;
+  --color-accent-soft: #3a2a10;
+  --color-electric: #35e3e3;
+  --color-electric-soft: #0f3535;
+
+  --color-success: #34d399;
+  --color-success-soft: #113026;
+  --color-warning: #fbbf24;
+  --color-warning-soft: #3a2c0c;
+  --color-danger: #f87171;
+  --color-danger-soft: #3a1616;
+
+  --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
 body {
-  @apply bg-neutral-50 text-neutral-900 antialiased;
+  @apply bg-bg text-text antialiased;
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Motion — CSS-only, respects reduced-motion */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent) 0%, transparent);
+  }
+}
+
+@keyframes fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-fade-slide-in {
+  animation: fade-slide-in 0.35s ease-out both;
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface) 25%,
+    var(--color-surface-raised) 50%,
+    var(--color-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-glow,
+  .animate-fade-slide-in,
+  .animate-shimmer {
+    animation: none;
+  }
 }

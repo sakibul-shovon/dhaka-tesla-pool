@@ -1,4 +1,5 @@
 import { formatPaisaAsTaka, paisa } from "@dhaka-tesla-pool/shared";
+import { Zap } from "lucide-react";
 
 export function FareCard({
   soloFarePaisa,
@@ -13,20 +14,30 @@ export function FareCard({
   pooled: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-        {isFinal ? "Fare" : "Estimated fare"}
-      </p>
-      <div className="mt-1 flex items-baseline gap-2">
+    <div className="rounded-2xl border border-border bg-surface p-5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-wide text-text-faint">
+          {isFinal ? "Fare" : "Estimated fare"}
+        </p>
         {pooled && (
-          <span className="text-lg text-neutral-400 line-through">{formatPaisaAsTaka(paisa(soloFarePaisa))}</span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-electric-soft px-2.5 py-1 text-xs font-medium text-electric">
+            <Zap size={12} strokeWidth={2.5} />
+            Pooled
+          </span>
         )}
-        <span className="text-3xl font-bold text-neutral-900">
+      </div>
+      <div className="mt-2 flex items-baseline gap-2.5">
+        {pooled && (
+          <span className="tabular text-lg text-text-faint line-through">
+            {formatPaisaAsTaka(paisa(soloFarePaisa))}
+          </span>
+        )}
+        <span className="font-display tabular text-4xl font-bold text-text">
           {formatPaisaAsTaka(paisa(pooled ? pooledFarePaisa : soloFarePaisa))}
         </span>
       </div>
-      {pooled && <p className="mt-1 text-sm text-neutral-500">Shared with another passenger</p>}
-      {!pooled && !isFinal && <p className="mt-1 text-sm text-neutral-500">Drops if someone shares your Tesla</p>}
+      {pooled && <p className="mt-1.5 text-sm text-text-muted">Shared with another passenger</p>}
+      {!pooled && !isFinal && <p className="mt-1.5 text-sm text-text-muted">Drops if someone shares your Tesla</p>}
     </div>
   );
 }

@@ -31,6 +31,7 @@ import {
   type PoolRow,
 } from "./repository.js";
 import { cancelPoolSchema } from "./schemas.js";
+import { insertWalletTransaction, lockOrCreateWallet, updateWalletBalance } from "../wallet/repository.js";
 
 function poolNotFoundError(): HttpError {
   return new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that pool.");
@@ -226,6 +227,23 @@ export function poolsRouter(db: Db): Router {
         // no extra pool-status check needed (C8).
         await applyRideTransition(tx, lockedRequest, "dropOff", driverId);
         await markMembershipDroppedOff(tx, membershipId);
+
+        // TeslaPay debit (plan §8.4) — wallet locked last, after pool and
+        // request, per the global lock order. finalFarePaisa is guaranteed
+        // set: dropOff is only reachable from STARTED, and start is what
+        // fixes it. WALLET_TRANSACTIONS_RIDE_REQUEST_TYPE_UNIQUE is the
+        // backstop against a double debit; dropOff's own one-shot state
+        // transition already makes a second attempt unreachable in practice.
+        if (membership.paymentMethod === "TESLAPAY") {
+          const wallet = await lockOrCreateWallet(tx, lockedRequest.passengerId, guard);
+          await updateWalletBalance(tx, lockedRequest.passengerId, wallet.balancePaisa - membership.finalFarePaisa!);
+          await insertWalletTransaction(tx, {
+            walletUserId: lockedRequest.passengerId,
+            type: "DEBIT",
+            amountPaisa: membership.finalFarePaisa!,
+            rideRequestId: membership.rideRequestId,
+          });
+        }
 
         const stillRiding = await listActiveMembers(tx, lockedPool.id);
         if (stillRiding.length === 0) {

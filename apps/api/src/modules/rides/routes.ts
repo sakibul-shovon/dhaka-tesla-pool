@@ -23,6 +23,7 @@ import { isUniqueViolation } from "../../lib/pg-errors.js";
 import { runInTransaction } from "../../lib/transaction.js";
 import { createLockOrderGuard, lockPoolById } from "../../lib/lock-order.js";
 import { applyPoolTransition } from "../../domain-writes/pool-transitions.js";
+import { findWalletBalance } from "../wallet/repository.js";
 import {
   findMembershipByRideRequestId,
   findPoolSummaryForRideRequest,
@@ -107,6 +108,21 @@ export function ridesRouter(db: Db): Router {
         const { pickupZone, dropoffZone, seats, paymentMethod } = parsed.data;
         const distanceDkm = manhattanDistanceDkm(pickupZone, dropoffZone);
         const fare = computeFare(distanceDkm, seats);
+
+        // Gated against the solo fare — the ceiling, since the eventual
+        // pooled fare can only be lower (plan §8.4). A plain read is safe
+        // here: a passenger can have at most one active request at a time
+        // (RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX), so there's no way for
+        // two of these checks to race each other for the same balance.
+        if (paymentMethod === "TESLAPAY") {
+          const balancePaisa = await findWalletBalance(tx, passengerId);
+          if (balancePaisa < fare.soloFarePaisa) {
+            throw new HttpError(409, ERROR_CODES.INSUFFICIENT_BALANCE, "Not enough TeslaPay balance for this trip.", {
+              balancePaisa,
+              requiredPaisa: fare.soloFarePaisa,
+            });
+          }
+        }
 
         let created;
         try {

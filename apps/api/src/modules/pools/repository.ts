@@ -224,16 +224,30 @@ export async function findMembershipInPool(
   db: Db | Tx,
   poolId: string,
   membershipId: string,
-): Promise<{ id: string; rideRequestId: string; seats: number; releasedAt: Date | null; droppedOffAt: Date | null } | undefined> {
+): Promise<
+  | {
+      id: string;
+      rideRequestId: string;
+      seats: number;
+      finalFarePaisa: number | null;
+      paymentMethod: "CASH" | "TESLAPAY";
+      releasedAt: Date | null;
+      droppedOffAt: Date | null;
+    }
+  | undefined
+> {
   const [row] = await db
     .select({
       id: poolMemberships.id,
       rideRequestId: poolMemberships.rideRequestId,
       seats: poolMemberships.seats,
+      finalFarePaisa: poolMemberships.finalFarePaisa,
+      paymentMethod: rideRequests.paymentMethod,
       releasedAt: poolMemberships.releasedAt,
       droppedOffAt: poolMemberships.droppedOffAt,
     })
     .from(poolMemberships)
+    .innerJoin(rideRequests, eq(rideRequests.id, poolMemberships.rideRequestId))
     .where(and(eq(poolMemberships.poolId, poolId), eq(poolMemberships.id, membershipId)))
     .limit(1);
   return row;

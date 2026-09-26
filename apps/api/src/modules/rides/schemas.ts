@@ -3,11 +3,8 @@ import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT } from "../../http/pagination.js";
 import { RIDE_STATUSES } from "../../domain/ride-state-machine.js";
 import { refinePickupNeDropoff, tripFieldsSchema } from "../fares/schemas.js";
 
-// TESLAPAY is P2 (plan §8.4) — the wallet doesn't exist yet, so accepting it
-// here would create a request no drop-off flow can ever settle. CASH only
-// until that session lands.
 export const createRideRequestSchema = tripFieldsSchema
-  .extend({ paymentMethod: z.literal("CASH") })
+  .extend({ paymentMethod: z.enum(["CASH", "TESLAPAY"]) })
   .strict()
   .refine(refinePickupNeDropoff, {
     message: "Pickup and drop-off zone must differ.",

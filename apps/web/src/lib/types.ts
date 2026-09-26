@@ -86,6 +86,18 @@ export interface Zone {
   yDkm: number;
 }
 
+export interface WalletSummary {
+  balancePaisa: number;
+}
+
+export interface WalletTransaction {
+  id: string;
+  type: "TOPUP" | "DEBIT";
+  amountPaisa: number;
+  rideRequestId: string | null;
+  createdAt: string;
+}
+
 export interface FareQuote {
   distanceDkm: number;
   soloFarePaisa: number;

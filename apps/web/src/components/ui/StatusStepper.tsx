@@ -35,9 +35,9 @@ export function StatusStepper({ status }: { status: RideStatus }) {
                 className={
                   "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors " +
                   (isDone
-                    ? "border-accent bg-accent text-bg"
+                    ? "border-accent bg-accent text-on-accent"
                     : isCurrent
-                      ? "animate-pulse-glow border-accent bg-accent-soft text-accent"
+                      ? "animate-pulse-glow border-accent bg-accent-soft text-accent-strong"
                       : "border-border-strong bg-surface-raised text-text-faint")
                 }
                 aria-current={isCurrent ? "step" : undefined}

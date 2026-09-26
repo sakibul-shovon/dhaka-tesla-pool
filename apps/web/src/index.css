@@ -1,32 +1,41 @@
 @import "tailwindcss";
 
-/* "Electric Night" — dark EV-cockpit palette. Single theme on purpose (no
-   light/dark toggle for this MVP); see README's Next improvements. */
+/* "Dhaka Daylight" — warm, light palette (redesign plan, 2026-09). Single
+   theme on purpose (no light/dark toggle for this MVP); see README's Next
+   improvements. Token *names* are kept stable across the redesign so every
+   component below only needed value changes, not a rewrite — except
+   `--color-on-accent`, added because the old palette let the primary button
+   borrow `--color-bg` for its text color, which only worked by coincidence
+   (bg happened to be near-black); that coupling breaks the moment bg is
+   light, so it now has its own explicit token. */
 @theme {
-  --color-bg: #0a0b0e;
-  --color-surface: #15171c;
-  --color-surface-raised: #1c1f26;
-  --color-border: #262a33;
-  --color-border-strong: #363c48;
+  --color-bg: #faf7f0;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f3ede1;
+  --color-border: #e9e1d2;
+  --color-border-strong: #d9cdb5;
 
-  --color-text: #f2f3f5;
-  --color-text-muted: #9aa1ad;
-  --color-text-faint: #5c6470;
+  --color-text: #241c13;
+  --color-text-muted: #6e6455;
+  --color-text-faint: #a79c88;
 
-  /* amber carries the brand equity from the original MVP palette, deepened
-     for a dark surface; electric cyan is the secondary/route-line accent. */
+  /* amber carries the brand equity from the original MVP palette across two
+     design iterations now, recalibrated for text/fills on a light surface
+     instead of a dark glow; teal remains the secondary "shared ride" accent,
+     used only for pooling-related indicators, never decoration. */
   --color-accent: #f5a623;
-  --color-accent-strong: #ffb84d;
-  --color-accent-soft: #3a2a10;
-  --color-electric: #35e3e3;
-  --color-electric-soft: #0f3535;
+  --color-accent-strong: #96540a;
+  --color-accent-soft: #fbeacb;
+  --color-on-accent: var(--color-text);
+  --color-electric: #0e7a6e;
+  --color-electric-soft: #dcf0ec;
 
-  --color-success: #34d399;
-  --color-success-soft: #113026;
-  --color-warning: #fbbf24;
-  --color-warning-soft: #3a2c0c;
-  --color-danger: #f87171;
-  --color-danger-soft: #3a1616;
+  --color-success: #1f9d6b;
+  --color-success-soft: #dff3e8;
+  --color-warning: #8a6d00;
+  --color-warning-soft: #fbf1ce;
+  --color-danger: #c4432c;
+  --color-danger-soft: #fbe5df;
 
   --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;

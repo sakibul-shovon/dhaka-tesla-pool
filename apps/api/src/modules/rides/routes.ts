@@ -47,6 +47,12 @@ import {
 } from "./repository.js";
 import { cancelRideRequestSchema, createRideRequestSchema, listRideRequestsQuerySchema } from "./schemas.js";
 
+// Signals "the membership situation changed between the unlocked read and
+// the lock" (plan §10.4) — caught only inside the cancel handler's own retry
+// loop below, never surfaced past it.
+class StaleCancelMembershipError extends Error {}
+const MAX_CANCEL_ATTEMPTS = 3;
+
 const ROUTE = {
   create: "/api/v1/ride-requests",
   cancel: "/api/v1/ride-requests/:id/cancel",
@@ -282,45 +288,79 @@ export function ridesRouter(db: Db): Router {
       const rideRequestId = requireIdParam(req.params.id);
       const fingerprint = fingerprintRequest("POST", ROUTE.cancel, parsed.data);
 
-      const { replayed, status, body } = await runInTransaction(db, async (tx) => {
-        const claim = await claimIdempotencyKey(tx, passengerId, {
-          key: idempotencyKey,
-          operation: "cancelRideRequest",
-          fingerprint,
-        });
-        if (claim.replayed) {
-          return { replayed: true, status: claim.responseStatus, body: claim.responseBody };
-        }
+      let replayed = false;
+      let status = 0;
+      let body: unknown;
 
-        // Plan §10.4's cancelRideRequest script: read the (unlocked)
-        // membership first only to learn whether a pool needs locking, then
-        // lock pool -> requests, respecting the global order (plan §10.2) —
-        // never the other way around.
-        const membership = await findMembershipByRideRequestId(tx, rideRequestId);
-        const guard = createLockOrderGuard();
-        const lockedPool =
-          membership && !membership.releasedAt ? await lockPoolById(tx, membership.poolId, guard) : undefined;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          ({ replayed, status, body } = await runInTransaction(db, async (tx) => {
+            const claim = await claimIdempotencyKey(tx, passengerId, {
+              key: idempotencyKey,
+              operation: "cancelRideRequest",
+              fingerprint,
+            });
+            if (claim.replayed) {
+              return { replayed: true, status: claim.responseStatus, body: claim.responseBody };
+            }
 
-        const locked = await lockRideRequestForOwner(tx, rideRequestId, passengerId, guard);
-        if (!locked) {
-          throw new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride.");
-        }
+            // Plan §10.4's cancelRideRequest script: read the (unlocked)
+            // membership first only to learn whether a pool needs locking,
+            // then lock pool -> requests, respecting the global order (plan
+            // §10.2) — never the other way around.
+            const membership = await findMembershipByRideRequestId(tx, rideRequestId);
+            const guard = createLockOrderGuard();
+            const lockedPool =
+              membership && !membership.releasedAt ? await lockPoolById(tx, membership.poolId, guard) : undefined;
 
-        const updated = await applyRideTransition(tx, locked, "cancel", passengerId, parsed.data.reason);
+            const locked = await lockRideRequestForOwner(tx, rideRequestId, passengerId, guard);
+            if (!locked) {
+              throw new HttpError(404, ERROR_CODES.NOT_FOUND, "We couldn't find that ride.");
+            }
 
-        if (lockedPool && membership) {
-          await releaseMembership(tx, membership.id);
-          await updatePoolSeatsReserved(tx, lockedPool.id, lockedPool.seatsReserved - locked.seats);
-          const stillUnreleased = await listUnreleasedMembers(tx, lockedPool.id);
-          if (stillUnreleased.length === 0 && lockedPool.status !== "STARTED") {
-            await applyPoolTransition(tx, lockedPool, "emptyCancel", passengerId, "EMPTY");
+            // Re-verify under lock (plan §10.4: "if its membership != poolId
+            // read earlier -> ROLLBACK, restart"). A concurrent accept/join
+            // can create a membership for this exact ride in the gap
+            // between the unlocked read above and this point, or a
+            // concurrent driver action can release the one we saw — either
+            // way, `lockedPool`/`membership` would then be stale, and acting
+            // on them would skip the cleanup a newly matched (or newly
+            // freed) seat needs. Once we hold the ride request's own lock,
+            // no other transaction can change its membership further, so
+            // this second read is the true, stable answer.
+            const freshMembership = await findMembershipByRideRequestId(tx, rideRequestId);
+            const expectedPoolId = membership && !membership.releasedAt ? membership.poolId : undefined;
+            const actualPoolId = freshMembership && !freshMembership.releasedAt ? freshMembership.poolId : undefined;
+            if (expectedPoolId !== actualPoolId) {
+              throw new StaleCancelMembershipError();
+            }
+
+            const updated = await applyRideTransition(tx, locked, "cancel", passengerId, parsed.data.reason);
+
+            if (lockedPool && membership) {
+              await releaseMembership(tx, membership.id);
+              await updatePoolSeatsReserved(tx, lockedPool.id, lockedPool.seatsReserved - locked.seats);
+              const stillUnreleased = await listUnreleasedMembers(tx, lockedPool.id);
+              if (stillUnreleased.length === 0 && lockedPool.status !== "STARTED") {
+                await applyPoolTransition(tx, lockedPool, "emptyCancel", passengerId, "EMPTY");
+              }
+            }
+
+            const dto = toRideRequestDTO(updated);
+            await finalizeIdempotencyKey(tx, passengerId, idempotencyKey, 200, dto);
+            return { replayed: false, status: 200, body: dto };
+          }));
+          break;
+        } catch (err) {
+          if (err instanceof StaleCancelMembershipError) {
+            if (attempt < MAX_CANCEL_ATTEMPTS) {
+              continue;
+            }
+            throw new HttpError(503, ERROR_CODES.SERVICE_BUSY, "Busy right now — try again in a moment.", undefined, 1);
           }
+          throw err;
         }
-
-        const dto = toRideRequestDTO(updated);
-        await finalizeIdempotencyKey(tx, passengerId, idempotencyKey, 200, dto);
-        return { replayed: false, status: 200, body: dto };
-      });
+      }
 
       if (replayed) {
         res.setHeader(IDEMPOTENT_REPLAYED_HEADER, "true");

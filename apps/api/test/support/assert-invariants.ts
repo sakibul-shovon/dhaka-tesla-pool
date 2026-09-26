@@ -53,6 +53,30 @@ export async function assertInvariants(pool: Pool): Promise<InvariantViolation[]
     });
   }
 
+  // The mirror image of the check above: a "ghost" membership left
+  // unreleased after its own ride request was cancelled. This is exactly
+  // the failure mode a race between accept/join and cancel produced before
+  // the cancel handler re-verified its membership read under lock — I4
+  // alone can't see it, since the pool's own bookkeeping stays internally
+  // consistent (seats_reserved still matches the sum of unreleased seats;
+  // it's just summing a membership that shouldn't still be unreleased).
+  // COMPLETED is deliberately excluded: a normal drop-off sets
+  // dropped_off_at but never released_at (plan §5.2 — released_at is
+  // "cancel / no-show" only), so an unreleased-but-completed membership is
+  // the expected, correct state, not a drift.
+  const ghostMembership = await pool.query<{ id: string; ride_request_id: string }>(`
+    SELECT m.id, m.ride_request_id
+    FROM pool_memberships m
+    JOIN ride_requests r ON r.id = m.ride_request_id
+    WHERE m.released_at IS NULL AND r.status = 'CANCELLED'
+  `);
+  for (const row of ghostMembership.rows) {
+    violations.push({
+      invariant: "no unreleased membership points at a CANCELLED ride_request",
+      detail: `membership ${row.id}: ride_request ${row.ride_request_id}`,
+    });
+  }
+
   // Also DB-enforced by `ride_requests_active_per_passenger`.
   const activeDuplicates = await pool.query<{ passenger_id: string; count: string }>(`
     SELECT passenger_id, COUNT(*) AS count

@@ -153,7 +153,7 @@ export function PassengerHomePage() {
           <input
             type="number"
             min={1}
-            max={6}
+            max={3}
             required
             value={seats}
             onChange={(event) => setSeats(Number(event.target.value))}

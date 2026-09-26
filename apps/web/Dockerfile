@@ -13,4 +13,8 @@ FROM nginx:1.27-alpine AS runtime
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
-HEALTHCHECK --interval=5s --timeout=3s --retries=10 CMD wget -qO- http://localhost/ || exit 1
+# 127.0.0.1, not localhost: nginx's bare `listen 80;` only binds IPv4, but
+# busybox wget (this image's wget) resolves "localhost" to ::1 first and
+# doesn't reliably fall back — that's a false-negative healthcheck, not a
+# real one, on an otherwise perfectly healthy container.
+HEALTHCHECK --interval=5s --timeout=3s --retries=10 CMD wget -qO- http://127.0.0.1/ || exit 1

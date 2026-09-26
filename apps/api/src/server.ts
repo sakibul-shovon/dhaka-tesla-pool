@@ -15,7 +15,7 @@ try {
 }
 
 const logger = createLogger(env);
-const pool = createPool(env.DATABASE_URL);
+const pool = createPool(env.DATABASE_URL, env.DB_POOL_MAX);
 const app = buildApp({
   pool,
   logger,

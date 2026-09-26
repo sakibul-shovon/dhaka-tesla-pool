@@ -22,6 +22,11 @@ describe("parseEnv", () => {
     expect(env.SESSION_TTL_HOURS).toBe(168);
     expect(env.COOKIE_SECURE).toBe(false);
     expect(env.TRUST_PROXY).toBe(0);
+    expect(env.DB_POOL_MAX).toBe(5);
+  });
+
+  it("accepts an explicit DB_POOL_MAX override", () => {
+    expect(parseEnv({ DATABASE_URL: "postgres://x", DB_POOL_MAX: "10" }).DB_POOL_MAX).toBe(10);
   });
 
   it("parses COOKIE_SECURE=true as a real boolean, not Boolean(string)", () => {

@@ -1,13 +1,26 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { EyeOff, MapPin, Navigation, Receipt, ShieldCheck, Users, Wallet, ArrowRight } from "lucide-react";
+import {
+  ArrowRight,
+  Car,
+  Clock3,
+  EyeOff,
+  Gauge,
+  MapPin,
+  Navigation,
+  Receipt,
+  ShieldCheck,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { formatPaisaAsTaka, paisa } from "@dhaka-tesla-pool/shared";
 import { useZones } from "../../lib/zones.js";
 import { ZoneDiagram } from "../../components/map/ZoneDiagram.js";
 import { SeatMeter } from "../../components/ui/SeatMeter.js";
 import { Button } from "../../components/ui/Button.js";
 import { Select } from "../../components/ui/Select.js";
+import { SectionHeader } from "../../components/layout/SectionHeader.js";
 import rickshawPhoto from "../../assets/rickshaw-tesla.png";
 
 const QUICK_TRIP_KEY = "dtp-quick-trip";
@@ -30,28 +43,19 @@ const HOW_IT_WORKS = [
   },
 ] as const;
 
-const TRUST_POINTS = [
-  {
-    Icon: Receipt,
-    title: "See your fare before you book",
-    body: "Every quote is computed up front and stored with your request — the price only ever goes down if a pool discount applies, never up.",
-  },
-  {
-    Icon: ShieldCheck,
-    title: "Seats, guaranteed",
-    body: "A Tesla's capacity is enforced at the database level. You will never be squeezed into a seat that isn't actually free.",
-  },
-  {
-    Icon: Wallet,
-    title: "Ride your way",
-    body: "Pay cash on arrival, or keep a TeslaPay balance topped up for a faster checkout.",
-  },
-  {
-    Icon: EyeOff,
-    title: "Your privacy, respected",
-    body: "Sharing a Tesla shows you how many other riders are aboard — never who. Make it to Gulshan without making a new friend.",
-  },
-] as const;
+const RIDER_FEATURES = [
+  "See your exact fare before you request — solo and pooled, side by side",
+  "Track waiting → matched → arrived → on the way → done, live",
+  "Cancel free any time before the driver starts your trip",
+  "Pay cash, or keep a TeslaPay balance topped up",
+];
+
+const DRIVER_FEATURES = [
+  "Go online in your zone and see every compatible request",
+  "Bullet's 3 seats — the app enforces it, you never overbook",
+  "One tap each for arrived, started, and every drop-off",
+  "Full pool history with per-trip earnings",
+];
 
 function QuickTripWidget() {
   const zonesQuery = useZones();
@@ -71,7 +75,10 @@ function QuickTripWidget() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5"
+    >
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block space-y-1">
           <span className="text-xs font-medium text-text-muted">Pickup</span>
@@ -140,10 +147,16 @@ function HeroVisual() {
         transition={{ delay: 0.3, duration: 0.5 }}
         className="absolute -left-4 top-6 hidden rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-lg sm:block"
       >
-        <p className="text-[11px] font-medium uppercase tracking-wide text-text-faint">Nusrat's fare</p>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-text-faint">
+          Nusrat's fare
+        </p>
         <p className="mt-0.5 flex items-baseline gap-1.5">
-          <span className="tabular text-sm text-text-faint line-through">{formatPaisaAsTaka(paisa(6750))}</span>
-          <span className="tabular font-display text-lg font-bold text-text">{formatPaisaAsTaka(paisa(5400))}</span>
+          <span className="tabular text-sm text-text-faint line-through">
+            {formatPaisaAsTaka(paisa(6750))}
+          </span>
+          <span className="tabular font-display text-lg font-bold text-text">
+            {formatPaisaAsTaka(paisa(5400))}
+          </span>
         </p>
       </motion.div>
 
@@ -155,6 +168,35 @@ function HeroVisual() {
       >
         <SeatMeter capacity={3} reserved={2} />
       </motion.div>
+    </div>
+  );
+}
+
+function WorkedExample() {
+  const trips = [
+    { name: "Nusrat", route: "Banani → Mohakhali", solo: 6750, pooled: 5400 },
+    { name: "Rafiq", route: "Banani → Gulshan 1", solo: 7500, pooled: 6000 },
+  ];
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {trips.map((trip) => (
+        <div key={trip.name} className="rounded-2xl border border-border bg-surface p-5">
+          <p className="font-display text-sm font-semibold text-text">
+            {trip.name} <span className="font-normal text-text-muted">· {trip.route}</span>
+          </p>
+          <div className="mt-3 flex items-baseline gap-2.5">
+            <span className="tabular text-lg text-text-faint line-through">
+              {formatPaisaAsTaka(paisa(trip.solo))}
+            </span>
+            <span className="tabular font-display text-3xl font-bold text-text">
+              {formatPaisaAsTaka(paisa(trip.pooled))}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-text-muted">
+            once she shares Bullet with a compatible rider
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -229,42 +271,160 @@ export function LandingPage() {
         <HeroVisual />
       </section>
 
-      <section className="border-t border-border bg-surface">
+      <section className="border-y border-border bg-surface">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20 lg:px-8">
-          <h2 className="font-display text-2xl font-bold text-text sm:text-3xl">How pooling works</h2>
+          <SectionHeader
+            eyebrow="Real numbers, not marketing math"
+            title="The PRD's own example, run for real"
+            description="Nusrat and Rafiq board Bullet within a minute of each other, headed the same way. Here's exactly what they each pay."
+          />
           <div className="mt-10">
-            <HowItWorksSection />
+            <WorkedExample />
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20 lg:px-8">
-        <h2 className="font-display text-2xl font-bold text-text sm:text-3xl">Built on guarantees, not promises</h2>
-        <div className="mt-10 grid gap-6 sm:grid-cols-2">
-          {TRUST_POINTS.map(({ Icon, title, body }) => (
-            <div key={title} className="flex gap-4 rounded-2xl border border-border bg-surface p-5">
-              <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-electric-soft text-electric">
-                <Icon size={17} strokeWidth={2.25} />
-              </span>
-              <div>
-                <h3 className="font-display text-base font-semibold text-text">{title}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-text-muted">{body}</p>
-              </div>
-            </div>
-          ))}
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-24 lg:px-8">
+        <SectionHeader eyebrow="How it works" title="Three steps, every time" />
+        <div className="mt-10">
+          <HowItWorksSection />
         </div>
       </section>
 
-      <section className="border-t border-border bg-surface">
+      <section className="border-y border-border bg-surface">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-24 lg:px-8">
+          <SectionHeader eyebrow="Built on guarantees" title="Not promises — enforced rules" />
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-2xl border border-border bg-bg p-6 sm:col-span-2 sm:row-span-2 lg:col-span-2">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
+                <Gauge size={19} strokeWidth={2.25} />
+              </span>
+              <h3 className="mt-4 font-display text-xl font-semibold text-text">
+                Last seat, one winner
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-text-muted">
+                Two passengers can race for the same last seat at the exact same instant. The
+                database itself — not luck — makes sure exactly one of them gets it, and the other
+                sees "that seat was just taken" instantly.
+              </p>
+              <div className="mt-5 max-w-[220px]">
+                <SeatMeter capacity={3} reserved={3} />
+              </div>
+            </div>
+            {[
+              {
+                Icon: Receipt,
+                title: "Fare, locked",
+                body: "Never charged above your original quote.",
+              },
+              {
+                Icon: ShieldCheck,
+                title: "Capacity, enforced",
+                body: "A Tesla can't be overbooked, by design.",
+              },
+              {
+                Icon: Wallet,
+                title: "Cash or TeslaPay",
+                body: "Your choice, every time you book.",
+              },
+              {
+                Icon: EyeOff,
+                title: "Privacy, respected",
+                body: "Co-riders see a count, never a name.",
+              },
+            ].map(({ Icon, title, body }) => (
+              <div key={title} className="rounded-2xl border border-border bg-bg p-6">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-electric-soft text-electric">
+                  <Icon size={16} strokeWidth={2.25} />
+                </span>
+                <h3 className="mt-3 font-display text-sm font-semibold text-text">{title}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-text-muted">{body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-24 lg:px-8">
+        <SectionHeader
+          eyebrow="One app, two seats at the table"
+          title="Built for riders and drivers alike"
+        />
+        <div className="mt-10 grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-border bg-surface p-6 sm:p-8">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
+              <Users size={20} strokeWidth={2.25} />
+            </span>
+            <h3 className="mt-4 font-display text-xl font-semibold text-text">For riders</h3>
+            <ul className="mt-4 space-y-3">
+              {RIDER_FEATURES.map((feature) => (
+                <li key={feature} className="flex gap-2.5 text-sm text-text-muted">
+                  <span className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-accent" />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+            <Link to="/register">
+              <Button className="mt-6" icon={<ArrowRight size={15} strokeWidth={2.25} />}>
+                Request a ride
+              </Button>
+            </Link>
+          </div>
+          <div className="rounded-2xl border border-border bg-surface p-6 sm:p-8">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-electric-soft text-electric">
+              <Car size={20} strokeWidth={2.25} />
+            </span>
+            <h3 className="mt-4 font-display text-xl font-semibold text-text">For drivers</h3>
+            <ul className="mt-4 space-y-3">
+              {DRIVER_FEATURES.map((feature) => (
+                <li key={feature} className="flex gap-2.5 text-sm text-text-muted">
+                  <span className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-electric" />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-6 text-sm text-text-faint">
+              Driver accounts are set up by an admin — talk to your Dhaka Tesla Pool contact to get
+              one.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-border bg-surface">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 py-16 text-center sm:px-6 lg:py-20 lg:px-8">
           <img
             src={rickshawPhoto}
             alt="Jashim's battery rickshaw, decorated and branded as a 'Tesla' — the vehicle this whole product is built around"
-            className="w-36 rounded-xl border-4 border-surface shadow-lg sm:w-40"
+            className="w-36 -rotate-2 rounded-xl border-4 border-bg shadow-lg sm:w-40"
           />
           <p className="max-w-xl text-sm text-text-muted">
-            In Dhaka, your Tesla may have three wheels — a battery rickshaw with a hand-painted badge, not a
-            car. The pooling, the fares, and the seat-capacity math are all built around exactly that.
+            In Dhaka, your Tesla may have three wheels — a battery rickshaw with a hand-painted
+            badge, not a car. The pooling, the fares, and the seat-capacity math are all built
+            around exactly that.
+          </p>
+        </div>
+      </section>
+
+      <section className="bg-text">
+        <div className="mx-auto max-w-7xl px-4 py-16 text-center sm:px-6 lg:py-20 lg:px-8">
+          <h2 className="text-balance font-display text-3xl font-bold text-bg sm:text-4xl">
+            Ready to share your first Tesla?
+          </h2>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <Link to="/register">
+              <Button className="px-6 py-3">Get started</Button>
+            </Link>
+            <Link
+              to="/login"
+              className="rounded-xl border border-bg/25 px-6 py-3 text-sm font-semibold text-bg transition-colors hover:border-bg/50"
+            >
+              Sign in
+            </Link>
+          </div>
+          <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-bg/60">
+            <Clock3 size={13} strokeWidth={2.25} />
+            Free-tier hosting — the first request of the day may take a minute to wake up.
           </p>
         </div>
       </section>

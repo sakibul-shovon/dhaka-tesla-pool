@@ -4,6 +4,13 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // maplibre-gl constructs its tile-parsing Worker from a URL that breaks
+  // once Vite's dep optimizer rewrites the module into .vite/deps — the
+  // worker 404s and the map silently renders no tiles. Excluding it from
+  // pre-bundling keeps its own worker URL intact.
+  optimizeDeps: {
+    exclude: ["maplibre-gl"],
+  },
   server: {
     proxy: {
       // Same-origin in dev too, so cookies behave the same as production's

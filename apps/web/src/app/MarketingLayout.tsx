@@ -1,5 +1,6 @@
 import { Link, Outlet } from "react-router-dom";
 import { Zap } from "lucide-react";
+import { ThemeToggle } from "../components/ui/ThemeToggle.js";
 
 // The public-facing shell (landing page today) — distinct from AppLayout,
 // which assumes an authenticated user and role-based nav. This one only
@@ -16,6 +17,7 @@ export function MarketingLayout() {
             Dhaka Tesla Pool
           </Link>
           <nav className="flex items-center gap-1.5 sm:gap-2" aria-label="Primary">
+            <ThemeToggle />
             <Link
               to="/login"
               className="rounded-lg px-3 py-1.5 text-sm font-medium text-text-muted transition-colors hover:bg-surface-raised hover:text-text"

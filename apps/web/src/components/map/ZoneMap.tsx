@@ -2,11 +2,16 @@ import { useEffect, useMemo, useRef, type ComponentType } from "react";
 import { Map as MapLibreMap, Marker, Source, Layer, type MapRef } from "@vis.gl/react-maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Car, Flag, MapPin } from "lucide-react";
+import { useTheme } from "../../app/theme.js";
 import { DHAKA_CENTER, ZONE_DISPLAY_COORDS } from "./zoneCoords.js";
 
 // Free vector tiles, no API key / account / quota (plan §5) — matches the
-// PRD's free-tier-only rule with zero billing risk.
-const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+// PRD's free-tier-only rule with zero billing risk. Positron over the
+// busier "liberty" style in light mode (plan round 3: "calmer, more
+// premium"); react-maplibre's Map applies a mapStyle change live via
+// map.setStyle, so this can just follow the resolved theme.
+const MAP_STYLE_LIGHT = "https://tiles.openfreemap.org/styles/positron";
+const MAP_STYLE_DARK = "https://tiles.openfreemap.org/styles/dark";
 
 export type ZoneMarkerTone = "pickup" | "dropoff" | "driver";
 
@@ -16,9 +21,16 @@ export interface ZoneMapMarker {
   tone: ZoneMarkerTone;
 }
 
-const TONE_STYLES: Record<ZoneMarkerTone, { className: string; Icon: ComponentType<{ size?: number; strokeWidth?: number }> }> = {
+// Fixed colors, not theme tokens: a marker's own fill doesn't get lighter
+// just because the page went dark — "dropoff" specifically must NOT follow
+// `--color-text`, which is exactly the token that flips brightness between
+// themes and would turn this pin invisible-on-itself in dark mode.
+const TONE_STYLES: Record<
+  ZoneMarkerTone,
+  { className: string; Icon: ComponentType<{ size?: number; strokeWidth?: number }> }
+> = {
   pickup: { className: "bg-accent text-on-accent", Icon: MapPin },
-  dropoff: { className: "bg-text text-white", Icon: Flag },
+  dropoff: { className: "bg-[#241c13] text-white", Icon: Flag },
   driver: { className: "bg-electric text-white", Icon: Car },
 };
 
@@ -63,10 +75,13 @@ export function ZoneMap({
 }) {
   const route = useRouteLine(markers, showRoute);
   const mapRef = useRef<MapRef>(null);
+  const { resolvedDark } = useTheme();
 
   const located = markers
     .map((marker) => ({ marker, coords: ZONE_DISPLAY_COORDS[marker.zoneCode] }))
-    .filter((entry): entry is { marker: ZoneMapMarker; coords: [number, number] } => Boolean(entry.coords));
+    .filter((entry): entry is { marker: ZoneMapMarker; coords: [number, number] } =>
+      Boolean(entry.coords),
+    );
 
   const center =
     located.length > 0
@@ -99,7 +114,7 @@ export function ZoneMap({
       <MapLibreMap
         ref={mapRef}
         initialViewState={{ longitude: center[1], latitude: center[0], zoom }}
-        mapStyle={MAP_STYLE}
+        mapStyle={resolvedDark ? MAP_STYLE_DARK : MAP_STYLE_LIGHT}
         style={{ width: "100%", height: "100%" }}
         dragPan={interactive}
         dragRotate={false}
@@ -114,7 +129,11 @@ export function ZoneMap({
             <Layer
               id="zone-route-line"
               type="line"
-              paint={{ "line-color": "#6e6455", "line-width": 2, "line-dasharray": [2, 2] }}
+              paint={{
+                "line-color": resolvedDark ? "#b6ab97" : "#6e6455",
+                "line-width": 2,
+                "line-dasharray": [2, 2],
+              }}
             />
           </Source>
         )}

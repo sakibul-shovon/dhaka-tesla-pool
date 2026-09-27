@@ -1,14 +1,16 @@
-import { useRef } from "react";
-import { Link } from "react-router-dom";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { useGSAP } from "@gsap/react";
-import { MapPin, Navigation, Receipt, ShieldCheck, Users, Wallet, EyeOff } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { motion } from "motion/react";
+import { EyeOff, MapPin, Navigation, Receipt, ShieldCheck, Users, Wallet, ArrowRight } from "lucide-react";
+import { formatPaisaAsTaka, paisa } from "@dhaka-tesla-pool/shared";
 import { useZones } from "../../lib/zones.js";
 import { ZoneDiagram } from "../../components/map/ZoneDiagram.js";
+import { SeatMeter } from "../../components/ui/SeatMeter.js";
+import { Button } from "../../components/ui/Button.js";
+import { Select } from "../../components/ui/Select.js";
 import rickshawPhoto from "../../assets/rickshaw-tesla.png";
 
-gsap.registerPlugin(ScrollTrigger);
+const QUICK_TRIP_KEY = "dtp-quick-trip";
 
 const HOW_IT_WORKS = [
   {
@@ -51,66 +53,75 @@ const TRUST_POINTS = [
   },
 ] as const;
 
-export function LandingPage() {
+function QuickTripWidget() {
   const zonesQuery = useZones();
   const zones = zonesQuery.data ?? [];
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [pickup, setPickup] = useState("");
+  const [dropoff, setDropoff] = useState("");
+  const navigate = useNavigate();
 
-  useGSAP(
-    () => {
-      const mm = gsap.matchMedia();
-      // Respect the OS setting the same way Motion does elsewhere in the app
-      // (plan §8) — GSAP has no global equivalent to MotionConfig, so each
-      // scroll-triggered set-piece needs its own matchMedia branch.
-      mm.add("(prefers-reduced-motion: no-preference)", () => {
-        const reveals = gsap.utils.toArray<HTMLElement>("[data-reveal]");
-        for (const el of reveals) {
-          gsap.from(el, {
-            opacity: 0,
-            y: 24,
-            duration: 0.6,
-            ease: "power2.out",
-            scrollTrigger: { trigger: el, start: "top 88%" },
-          });
-        }
-      });
-      return () => mm.revert();
-    },
-    { scope: containerRef, dependencies: [zones.length] },
-  );
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    try {
+      sessionStorage.setItem(QUICK_TRIP_KEY, JSON.stringify({ pickup, dropoff }));
+    } catch {
+      // Best-effort prefill only — registration still works without it.
+    }
+    navigate("/register");
+  }
 
   return (
-    <div ref={containerRef}>
-      <section className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:items-center lg:gap-16 lg:py-24 lg:px-8">
-        <div>
-          <p className="font-display text-sm font-semibold uppercase tracking-wide text-accent-strong">
-            Dhaka's shared-ride pilot
-          </p>
-          <h1 className="mt-3 font-display text-4xl font-bold leading-tight text-text sm:text-5xl">
-            Share a seat. Split the fare.
-            <br />
-            Survive Dhaka traffic.
-          </h1>
-          <p className="mt-4 max-w-md text-base text-text-muted">
-            Request a ride across ten Dhaka zones. When someone's headed your way, split a Tesla and
-            the fare — automatically, fairly, and transparently.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Link
-              to="/register"
-              className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-on-accent shadow-sm transition-[filter] hover:brightness-95"
-            >
-              Get started
-            </Link>
-            <Link
-              to="/login"
-              className="rounded-xl border border-border-strong px-5 py-2.5 text-sm font-semibold text-text transition-colors hover:border-accent hover:text-accent-strong"
-            >
-              Sign in
-            </Link>
-          </div>
-        </div>
-        <div data-reveal className="aspect-square w-full">
+    <form onSubmit={handleSubmit} className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-text-muted">Pickup</span>
+          <Select value={pickup} onChange={(event) => setPickup(event.target.value)} required>
+            <option value="" disabled>
+              Choose a zone
+            </option>
+            {zones.map((zone) => (
+              <option key={zone.code} value={zone.code}>
+                {zone.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-text-muted">Drop-off</span>
+          <Select value={dropoff} onChange={(event) => setDropoff(event.target.value)} required>
+            <option value="" disabled>
+              Choose a zone
+            </option>
+            {zones
+              .filter((zone) => zone.code !== pickup)
+              .map((zone) => (
+                <option key={zone.code} value={zone.code}>
+                  {zone.name}
+                </option>
+              ))}
+          </Select>
+        </label>
+      </div>
+      <Button
+        type="submit"
+        disabled={!pickup || !dropoff}
+        className="mt-3 w-full"
+        icon={<ArrowRight size={15} strokeWidth={2.25} />}
+      >
+        See your fare
+      </Button>
+    </form>
+  );
+}
+
+function HeroVisual() {
+  const zonesQuery = useZones();
+  const zones = zonesQuery.data ?? [];
+
+  return (
+    <div className="relative">
+      <div className="overflow-hidden rounded-3xl border border-border bg-surface p-3 shadow-sm">
+        <div className="aspect-[4/3] w-full sm:aspect-square">
           <ZoneDiagram
             zones={zones}
             highlightZoneCodes={["BANANI", "MOHAKHALI", "GULSHAN_1"]}
@@ -121,41 +132,117 @@ export function LandingPage() {
             className="h-full w-full"
           />
         </div>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.5 }}
+        className="absolute -left-4 top-6 hidden rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-lg sm:block"
+      >
+        <p className="text-[11px] font-medium uppercase tracking-wide text-text-faint">Nusrat's fare</p>
+        <p className="mt-0.5 flex items-baseline gap-1.5">
+          <span className="tabular text-sm text-text-faint line-through">{formatPaisaAsTaka(paisa(6750))}</span>
+          <span className="tabular font-display text-lg font-bold text-text">{formatPaisaAsTaka(paisa(5400))}</span>
+        </p>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55, duration: 0.5 }}
+        className="absolute -bottom-4 -right-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-lg sm:right-6"
+      >
+        <SeatMeter capacity={3} reserved={2} />
+      </motion.div>
+    </div>
+  );
+}
+
+function HowItWorksSection() {
+  const [active, setActive] = useState(0);
+  const step = HOW_IT_WORKS[active] ?? HOW_IT_WORKS[0];
+
+  return (
+    <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
+      <div className="space-y-2">
+        {HOW_IT_WORKS.map((item, index) => (
+          <button
+            key={item.title}
+            type="button"
+            onClick={() => setActive(index)}
+            onMouseEnter={() => setActive(index)}
+            className={`flex w-full items-start gap-4 rounded-2xl border p-5 text-left transition-colors ${
+              active === index
+                ? "border-accent bg-accent-soft"
+                : "border-border bg-surface hover:border-border-strong"
+            }`}
+          >
+            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-surface-raised text-accent-strong lg:hidden">
+              <item.Icon size={18} strokeWidth={2.25} />
+            </span>
+            <div>
+              <p className="font-display text-xs font-semibold uppercase tracking-wide text-text-faint">
+                Step {index + 1}
+              </p>
+              <h3 className="mt-1 font-display text-lg font-semibold text-text">{item.title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-text-muted">{item.body}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className="sticky top-24 hidden self-start lg:block">
+        <div className="flex aspect-square flex-col items-center justify-center gap-4 rounded-3xl border border-border bg-surface p-10">
+          {step && <step.Icon size={72} strokeWidth={1.25} className="text-accent" />}
+          {step && <p className="font-display text-lg font-semibold text-text">{step.title}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function LandingPage() {
+  return (
+    <div>
+      <section className="mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:gap-16 lg:py-24 lg:px-8">
+        <div>
+          <p className="font-display text-sm font-semibold uppercase tracking-wide text-accent-strong">
+            Dhaka's shared-ride pilot
+          </p>
+          <h1 className="mt-3 text-balance font-display text-4xl font-bold leading-[1.1] text-text sm:text-5xl lg:text-6xl">
+            Share a seat. Split the fare. Survive Dhaka traffic.
+          </h1>
+          <p className="mt-5 max-w-md text-lg text-text-muted">
+            Request a ride across ten Dhaka zones. When someone's headed your way, split a Tesla and
+            the fare — automatically, fairly, and transparently.
+          </p>
+          <div className="mt-8 max-w-sm">
+            <QuickTripWidget />
+          </div>
+          <p className="mt-4 text-sm text-text-faint">
+            Already riding?{" "}
+            <Link to="/login" className="font-medium text-accent-strong hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </div>
+        <HeroVisual />
       </section>
 
       <section className="border-t border-border bg-surface">
-        <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:py-20 lg:px-8">
-          <h2 data-reveal className="font-display text-2xl font-bold text-text sm:text-3xl">
-            How pooling works
-          </h2>
-          <div className="mt-10 grid gap-8 sm:grid-cols-3">
-            {HOW_IT_WORKS.map(({ Icon, title, body }, index) => (
-              <div key={title} data-reveal>
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
-                  <Icon size={18} strokeWidth={2.25} />
-                </span>
-                <p className="mt-4 font-display text-sm font-semibold uppercase tracking-wide text-text-faint">
-                  Step {index + 1}
-                </p>
-                <h3 className="mt-1 font-display text-lg font-semibold text-text">{title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-text-muted">{body}</p>
-              </div>
-            ))}
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20 lg:px-8">
+          <h2 className="font-display text-2xl font-bold text-text sm:text-3xl">How pooling works</h2>
+          <div className="mt-10">
+            <HowItWorksSection />
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:py-20 lg:px-8">
-        <h2 data-reveal className="font-display text-2xl font-bold text-text sm:text-3xl">
-          Built on guarantees, not promises
-        </h2>
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20 lg:px-8">
+        <h2 className="font-display text-2xl font-bold text-text sm:text-3xl">Built on guarantees, not promises</h2>
         <div className="mt-10 grid gap-6 sm:grid-cols-2">
           {TRUST_POINTS.map(({ Icon, title, body }) => (
-            <div
-              key={title}
-              data-reveal
-              className="flex gap-4 rounded-2xl border border-border bg-surface p-5"
-            >
+            <div key={title} className="flex gap-4 rounded-2xl border border-border bg-surface p-5">
               <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-electric-soft text-electric">
                 <Icon size={17} strokeWidth={2.25} />
               </span>
@@ -169,19 +256,15 @@ export function LandingPage() {
       </section>
 
       <section className="border-t border-border bg-surface">
-        <div
-          data-reveal
-          className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-4 py-14 text-center sm:px-6 lg:py-20 lg:px-8"
-        >
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 py-16 text-center sm:px-6 lg:py-20 lg:px-8">
           <img
             src={rickshawPhoto}
             alt="Jashim's battery rickshaw, decorated and branded as a 'Tesla' — the vehicle this whole product is built around"
             className="w-36 rounded-xl border-4 border-surface shadow-lg sm:w-40"
           />
           <p className="max-w-xl text-sm text-text-muted">
-            In Dhaka, your Tesla may have three wheels — a battery rickshaw with a hand-painted
-            badge, not a car. The pooling, the fares, and the seat-capacity math are all built
-            around exactly that.
+            In Dhaka, your Tesla may have three wheels — a battery rickshaw with a hand-painted badge, not a
+            car. The pooling, the fares, and the seat-capacity math are all built around exactly that.
           </p>
         </div>
       </section>

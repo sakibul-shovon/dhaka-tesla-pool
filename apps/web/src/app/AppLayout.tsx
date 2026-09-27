@@ -74,9 +74,17 @@ export function AppLayout() {
 
   const logout = useMutation({
     mutationFn: () => api.postNoContent("/auth/logout"),
+    // A hard redirect, not client-side navigation -- the same reasoning as
+    // the session-expiry handler in auth-context.tsx. It's also load-bearing
+    // here for a subtler reason: that handler only redirects when it can see
+    // a previously-cached user (`hadUser`), specifically to tell "session
+    // expired mid-use" apart from a fresh unauthenticated visit. Clearing the
+    // cache here first would make an explicit sign-out look exactly like the
+    // latter to that check, so this can't rely on it -- it has to navigate
+    // itself.
     onSuccess: () => {
-      queryClient.setQueryData(["auth", "me"], undefined);
       queryClient.clear();
+      window.location.assign("/login");
     },
   });
 
@@ -102,11 +110,16 @@ export function AppLayout() {
               </NavLink>
             ))}
             <ThemeToggle className="ml-1" />
-            <span
-              className="mx-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-surface-raised text-xs font-semibold text-text-muted"
-              title={user?.name}
-            >
-              {getInitials(user?.name)}
+            <span className="mx-1.5 flex items-center gap-2">
+              <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-surface-raised text-xs font-semibold text-text-muted">
+                {getInitials(user?.name)}
+              </span>
+              <span
+                className="max-w-[9rem] truncate text-sm font-medium text-text"
+                title={user?.name}
+              >
+                {user?.name}
+              </span>
             </span>
             <button
               type="button"

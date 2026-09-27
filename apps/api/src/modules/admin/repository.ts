@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike, lt, or } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client.js";
-import { users, vehicles } from "../../db/schema.js";
+import { accountStatusHistory, users, vehicles } from "../../db/schema.js";
 import type { AccountStatus } from "../../domain/account-state-machine.js";
 
 export interface DriverSummary {
@@ -57,12 +57,90 @@ const ACCOUNT_COLUMNS = {
   createdAt: users.createdAt,
 } as const;
 
-// Used by the later user-directory/detail endpoints (ADR-019); the write
-// path (suspend/reactivate) goes through lockUserById + applyAccountTransition
-// instead, never through a plain repository update (plan §10.7).
+// The write path (suspend/reactivate) goes through lockUserById +
+// applyAccountTransition instead, never through a plain repository update
+// (plan §10.7) — everything below this line is read-only (ADR-019).
 export async function findAccountById(db: Db | Tx, id: string): Promise<AccountRow | undefined> {
   const [row] = await db.select(ACCOUNT_COLUMNS).from(users).where(eq(users.id, id)).limit(1);
   return row;
+}
+
+export interface ListAccountsParams {
+  role?: "PASSENGER" | "DRIVER" | "ADMIN";
+  status?: AccountStatus;
+  q?: string;
+  cursor?: { createdAt: Date; id: string };
+  limit: number;
+}
+
+// `limit + 1` rows fetched so the route can tell "there is a next page"
+// without a separate COUNT (plan §12.1 keyset pagination, same as every
+// other list endpoint).
+export async function listAccounts(db: Db, params: ListAccountsParams): Promise<AccountRow[]> {
+  const conditions = [];
+  if (params.role) {
+    conditions.push(eq(users.role, params.role));
+  }
+  if (params.status) {
+    conditions.push(eq(users.status, params.status));
+  }
+  if (params.q) {
+    const pattern = `%${params.q}%`;
+    conditions.push(or(ilike(users.name, pattern), ilike(users.email, pattern))!);
+  }
+  if (params.cursor) {
+    conditions.push(
+      or(
+        lt(users.createdAt, params.cursor.createdAt),
+        and(eq(users.createdAt, params.cursor.createdAt), lt(users.id, params.cursor.id))!,
+      )!,
+    );
+  }
+
+  return db
+    .select(ACCOUNT_COLUMNS)
+    .from(users)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(users.createdAt), desc(users.id))
+    .limit(params.limit + 1);
+}
+
+export interface AccountStatusHistoryRow {
+  id: number;
+  fromStatus: AccountStatus;
+  toStatus: AccountStatus;
+  actorUserId: string;
+  reason: string | null;
+  createdAt: Date;
+}
+
+export async function listAccountStatusHistory(
+  db: Db,
+  userId: string,
+): Promise<AccountStatusHistoryRow[]> {
+  return db
+    .select({
+      id: accountStatusHistory.id,
+      fromStatus: accountStatusHistory.fromStatus,
+      toStatus: accountStatusHistory.toStatus,
+      actorUserId: accountStatusHistory.actorUserId,
+      reason: accountStatusHistory.reason,
+      createdAt: accountStatusHistory.createdAt,
+    })
+    .from(accountStatusHistory)
+    .where(eq(accountStatusHistory.userId, userId))
+    .orderBy(desc(accountStatusHistory.createdAt), desc(accountStatusHistory.id));
+}
+
+export function toAccountStatusHistoryDTO(row: AccountStatusHistoryRow) {
+  return {
+    id: row.id,
+    fromStatus: row.fromStatus,
+    toStatus: row.toStatus,
+    actorUserId: row.actorUserId,
+    reason: row.reason,
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
 export interface NewDriver {

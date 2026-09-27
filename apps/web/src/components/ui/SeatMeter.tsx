@@ -1,3 +1,4 @@
+import { motion } from "motion/react";
 import { User } from "lucide-react";
 
 // plan §15.2's own shorthand for this exact meter: "●●○ 2/3 seats" — now
@@ -25,9 +26,15 @@ export function SeatMeter({
     >
       <div className="flex gap-1.5">
         {seats.map((filled, index) => (
-          <span
+          <motion.span
             key={index}
             aria-hidden
+            // Pops once when a seat actually fills (plan round 3 §4) — the
+            // keyframe target only changes shape on the false->true edge, so
+            // vacating a seat (no-show, cancel) just settles back to scale 1
+            // instead of popping again.
+            animate={{ scale: filled ? [0.7, 1.12, 1] : 1 }}
+            transition={{ duration: 0.32, ease: "easeOut" }}
             className={
               `flex items-center justify-center border transition-colors ${cellClass} ` +
               (filled
@@ -36,7 +43,7 @@ export function SeatMeter({
             }
           >
             <User size={iconSize} strokeWidth={2.25} fill={filled ? "currentColor" : "none"} />
-          </span>
+          </motion.span>
         ))}
       </div>
       <span

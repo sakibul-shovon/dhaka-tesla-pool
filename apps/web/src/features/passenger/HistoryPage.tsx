@@ -153,7 +153,7 @@ export function HistoryPage() {
               {query.data.data.map((ride) => (
                 <li key={ride.id}>
                   <Link to={`/p/rides/${ride.id}`}>
-                    <Card className="transition-colors hover:border-border-strong">
+                    <Card className="transition-[color,background-color,border-color,box-shadow,transform] hover:border-border-strong hover:shadow-md motion-safe:hover:-translate-y-0.5">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-text">
                           {ride.pickupZone} → {ride.dropoffZone}

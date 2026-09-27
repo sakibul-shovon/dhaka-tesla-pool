@@ -113,7 +113,7 @@ export function DriverHistoryPage() {
           {query.data.data.map((pool) => (
             <li key={pool.id}>
               <Link to={`/d/pools/${pool.id}`}>
-                <Card className="transition-colors hover:border-border-strong">
+                <Card className="transition-[color,background-color,border-color,box-shadow,transform] hover:border-border-strong hover:shadow-md motion-safe:hover:-translate-y-0.5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-text">Pickup: {pool.pickupZone}</span>
                     <Badge tone={statusTone(pool.status)}>

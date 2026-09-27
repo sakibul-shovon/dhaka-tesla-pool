@@ -54,3 +54,22 @@ background and were recalibrated (verified by computing contrast ratios directly
 A genuine product reason for a second theme appears (e.g. a driver-reported glare problem, not just
 aesthetic preference) — at that point, revisit the rejected hybrid-theme alternative above rather than
 inventing a new one.
+
+## Update — 2026-09-27 (round 3): System/Light/Dark preference added
+
+A follow-up UI/UX pass added a **System / Light / Dark** toggle (`app/theme.tsx`, `ThemeToggle`), stored in
+`localStorage` and applied before first paint. This is not the hybrid alternative rejected above: that
+alternative would have *locked* driver screens to a dark palette regardless of preference, coupling theme to
+role. What shipped instead is a single, ordinary user-controlled preference — available to passengers,
+drivers and admins alike — sitting on top of the same light "Dhaka Daylight" system as its default and
+primary identity (a fresh session with no stored preference still renders light-first when the OS itself
+prefers light, exactly as this ADR decided). Every reference platform from the original research (Uber,
+Lyft) ships the same shape: a light-primary brand with an optional system-following dark mode, not a
+dark-primary identity.
+
+Practically, this was driven by the same composition pass that fixed the app's empty-space problems, not by
+a driver glare report — so the specific trigger in "Revisit when" above is still technically unmet. It's
+recorded here anyway because the *outcome* (a dark palette existing in the product) is what that section
+anticipated, and a future reader diffing this ADR against the running app should not conclude the token
+values silently drifted out of sync with the decision. All dark-mode token pairs were verified against the
+same WCAG AA thresholds as the original light palette (contrast ratios computed directly, not eyeballed).

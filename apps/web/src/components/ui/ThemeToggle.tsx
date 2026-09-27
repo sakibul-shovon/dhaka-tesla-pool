@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from "motion/react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme, type ThemePreference } from "../../app/theme.js";
 
@@ -15,11 +16,22 @@ export function ThemeToggle({ className }: { className?: string }) {
       onClick={() =>
         setPreference(ORDER[(ORDER.indexOf(preference) + 1) % ORDER.length] ?? "system")
       }
-      className={`flex h-9 w-9 flex-none items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-raised hover:text-text ${className ?? ""}`}
+      className={`relative flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-lg text-text-muted transition-colors hover:bg-surface-raised hover:text-text ${className ?? ""}`}
       aria-label={`Theme: ${LABELS[preference]}. Click to change.`}
       title={LABELS[preference]}
     >
-      <Icon size={17} strokeWidth={2.25} />
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={preference}
+          initial={{ opacity: 0, rotate: -90, scale: 0.5 }}
+          animate={{ opacity: 1, rotate: 0, scale: 1 }}
+          exit={{ opacity: 0, rotate: 90, scale: 0.5 }}
+          transition={{ duration: 0.18 }}
+          className="flex"
+        >
+          <Icon size={17} strokeWidth={2.25} />
+        </motion.span>
+      </AnimatePresence>
     </button>
   );
 }

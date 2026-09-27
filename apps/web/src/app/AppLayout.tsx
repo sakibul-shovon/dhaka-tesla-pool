@@ -2,7 +2,18 @@ import { useState, type ComponentType } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { Car, Clock, LogOut, Menu, Users, Wallet, X, Zap } from "lucide-react";
+import {
+  Car,
+  Clock,
+  LayoutGrid,
+  LogOut,
+  Menu,
+  Route as RouteIcon,
+  Users,
+  Wallet,
+  X,
+  Zap,
+} from "lucide-react";
 import { api } from "../lib/api-client.js";
 import { useAuth } from "./auth-context.js";
 import { homePathForRole } from "./roles.js";
@@ -23,7 +34,12 @@ function navItemsForRole(role: string | undefined): NavItem[] {
     ];
   }
   if (role === "ADMIN") {
-    return [{ to: "/a", label: "Drivers", Icon: Users, end: true }];
+    return [
+      { to: "/a", label: "Overview", Icon: LayoutGrid, end: true },
+      { to: "/a/users", label: "Users", Icon: Users },
+      { to: "/a/rides", label: "Rides", Icon: RouteIcon },
+      { to: "/a/drivers", label: "Drivers", Icon: Car },
+    ];
   }
   return [
     { to: "/p", label: "Ride", Icon: Car, end: true },

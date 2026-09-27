@@ -15,6 +15,11 @@ import { DriverDashboardPage } from "../features/driver/DriverDashboardPage.js";
 import { DriverPoolPage } from "../features/driver/DriverPoolPage.js";
 import { DriverHistoryPage } from "../features/driver/DriverHistoryPage.js";
 import { AdminDashboardPage } from "../features/admin/AdminDashboardPage.js";
+import { AdminOverviewPage } from "../features/admin/AdminOverviewPage.js";
+import { AdminUsersPage } from "../features/admin/AdminUsersPage.js";
+import { AdminUserDetailPage } from "../features/admin/AdminUserDetailPage.js";
+import { AdminRidesPage } from "../features/admin/AdminRidesPage.js";
+import { AdminRideDetailPage } from "../features/admin/AdminRideDetailPage.js";
 
 // Lazy so GSAP (landing-page-only, per the redesign plan §8) never ships in
 // the bundle for the authenticated app — this is its own chunk, fetched
@@ -163,7 +168,12 @@ export function AppRouter() {
           </RequireAdmin>
         }
       >
-        <Route index element={<AdminDashboardPage />} />
+        <Route index element={<AdminOverviewPage />} />
+        <Route path="users" element={<AdminUsersPage />} />
+        <Route path="users/:id" element={<AdminUserDetailPage />} />
+        <Route path="rides" element={<AdminRidesPage />} />
+        <Route path="rides/:id" element={<AdminRideDetailPage />} />
+        <Route path="drivers" element={<AdminDashboardPage />} />
       </Route>
 
       <Route path="*" element={<RootRedirect />} />

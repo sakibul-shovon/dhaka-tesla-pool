@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
-import type { Db } from "../../db/client.js";
+import type { Db, Tx } from "../../db/client.js";
 import { users, vehicles } from "../../db/schema.js";
+import type { AccountStatus } from "../../domain/account-state-machine.js";
 
 export interface DriverSummary {
   id: string;
@@ -37,6 +38,33 @@ export async function listDrivers(db: Db): Promise<DriverSummary[]> {
     .orderBy(desc(users.createdAt));
 }
 
+export interface AccountRow {
+  id: string;
+  name: string;
+  email: string;
+  role: "PASSENGER" | "DRIVER" | "ADMIN";
+  status: AccountStatus;
+  createdAt: Date;
+}
+
+// Explicit allow-list — `password_hash` is never selected (plan §13.1 API8).
+const ACCOUNT_COLUMNS = {
+  id: users.id,
+  name: users.name,
+  email: users.email,
+  role: users.role,
+  status: users.status,
+  createdAt: users.createdAt,
+} as const;
+
+// Used by the later user-directory/detail endpoints (ADR-019); the write
+// path (suspend/reactivate) goes through lockUserById + applyAccountTransition
+// instead, never through a plain repository update (plan §10.7).
+export async function findAccountById(db: Db | Tx, id: string): Promise<AccountRow | undefined> {
+  const [row] = await db.select(ACCOUNT_COLUMNS).from(users).where(eq(users.id, id)).limit(1);
+  return row;
+}
+
 export interface NewDriver {
   name: string;
   email: string;
@@ -53,7 +81,12 @@ export interface NewDriver {
 export async function createDriverWithVehicle(db: Db, input: NewDriver): Promise<DriverSummary> {
   const [user] = await db
     .insert(users)
-    .values({ name: input.name, email: input.email, passwordHash: input.passwordHash, role: "DRIVER" })
+    .values({
+      name: input.name,
+      email: input.email,
+      passwordHash: input.passwordHash,
+      role: "DRIVER",
+    })
     .returning({
       id: users.id,
       name: users.name,

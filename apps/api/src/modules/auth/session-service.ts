@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Response } from "express";
-import { eq } from "drizzle-orm";
-import type { Db } from "../../db/client.js";
+import { and, eq, isNull } from "drizzle-orm";
+import type { Db, Tx } from "../../db/client.js";
 import { sessions, users } from "../../db/schema.js";
 
 // Plan §13.3: 32 random bytes, only the SHA-256 hash is ever stored — a
@@ -58,10 +58,29 @@ export async function resolveSession(db: Db, token: string): Promise<Authenticat
 }
 
 export async function revokeSession(db: Db, token: string): Promise<void> {
-  await db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.tokenHash, hashToken(token)));
+  await db
+    .update(sessions)
+    .set({ revokedAt: new Date() })
+    .where(eq(sessions.tokenHash, hashToken(token)));
 }
 
-export function setSessionCookie(res: Response, token: string, expiresAt: Date, secure: boolean): void {
+// Suspension (ADR-019) revokes rather than just pauses: resolveSession would
+// already reject a suspended user, but without this a later reactivation
+// would silently revive every old session — including an attacker's, if the
+// account was suspended because it was compromised.
+export async function revokeAllSessionsForUser(tx: Tx, userId: string): Promise<void> {
+  await tx
+    .update(sessions)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+}
+
+export function setSessionCookie(
+  res: Response,
+  token: string,
+  expiresAt: Date,
+  secure: boolean,
+): void {
   res.cookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure,

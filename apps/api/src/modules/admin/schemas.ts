@@ -18,3 +18,13 @@ export const createDriverSchema = z
   .strict();
 
 export type CreateDriverInput = z.infer<typeof createDriverSchema>;
+
+// Mirrors driver/pools' own cancel-with-reason schema — an optional, bounded
+// free-text audit note, never required.
+export const accountStatusChangeSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(500).optional(),
+  })
+  .strict();
+
+export type AccountStatusChangeInput = z.infer<typeof accountStatusChangeSchema>;

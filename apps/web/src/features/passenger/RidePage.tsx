@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Clock } from "lucide-react";
+import { ArrowLeft, ChevronDown, Clock } from "lucide-react";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
 import { createRefetchInterval, isColdStart, POLL_BASE_MS } from "../../lib/polling.js";
 import { useZones } from "../../lib/zones.js";
@@ -12,6 +12,8 @@ import {
   type RideRequest,
   type RideStatusHistoryEntry,
 } from "../../lib/types.js";
+import { Workspace } from "../../components/layout/Workspace.js";
+import { PageContainer } from "../../components/layout/PageContainer.js";
 import { StatusStepper } from "../../components/ui/StatusStepper.js";
 import { FareCard } from "../../components/ui/FareCard.js";
 import { SeatMeter } from "../../components/ui/SeatMeter.js";
@@ -31,6 +33,31 @@ const ZoneMap = lazy(() =>
 );
 
 const CANCELLABLE_STATUSES = new Set(["REQUESTED", "MATCHED", "DRIVER_ARRIVED"]);
+
+// The panel's headline (plan round 3 §3: "big status sentence... 'Looking for
+// a Tesla in Banani', 'Jashim has arrived with Bullet'") — one real sentence
+// instead of a status enum, built only from data the ride response already
+// carries, never invented details like an ETA the backend doesn't compute.
+function statusSentence(ride: RideRequest, pickupName: string, dropoffName: string): string {
+  switch (ride.status) {
+    case "REQUESTED":
+      return `Looking for a Tesla in ${pickupName}`;
+    case "MATCHED":
+      return ride.pool
+        ? `${ride.pool.driverFirstName} is heading your way in ${ride.pool.vehicleName}`
+        : "You've been matched with a Tesla";
+    case "DRIVER_ARRIVED":
+      return ride.pool
+        ? `${ride.pool.driverFirstName} has arrived with ${ride.pool.vehicleName}`
+        : "Your driver has arrived";
+    case "STARTED":
+      return `On the way to ${dropoffName}`;
+    case "COMPLETED":
+      return "Trip completed";
+    case "CANCELLED":
+      return "This ride was cancelled";
+  }
+}
 
 function OfferRow({ offer, rideId }: { offer: PoolOffer; rideId: string }) {
   const queryClient = useQueryClient();
@@ -100,6 +127,23 @@ function OfferRow({ offer, rideId }: { offer: PoolOffer; rideId: string }) {
   );
 }
 
+function RideSkeleton() {
+  return (
+    <Workspace
+      panel={
+        <div className="space-y-4">
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-8 w-3/4" />
+          <Skeleton className="h-10 rounded-xl" />
+          <Skeleton className="h-24 rounded-2xl" />
+          <Skeleton className="h-24 rounded-2xl" />
+        </div>
+      }
+      map={<Skeleton className="h-full w-full rounded-none" />}
+    />
+  );
+}
+
 export function RidePage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -164,23 +208,19 @@ export function RidePage() {
   });
 
   if (rideQuery.isPending) {
-    return (
-      <div className="max-w-md space-y-4">
-        <Skeleton className="h-6 w-20" />
-        <Skeleton className="h-40 rounded-2xl" />
-        <Skeleton className="h-24 rounded-2xl" />
-      </div>
-    );
+    return <RideSkeleton />;
   }
 
   if (rideQuery.isError) {
     const coldStart = isColdStart(rideQuery as never);
     return (
-      <ErrorBanner
-        message="We can't reach the server. Retry."
-        coldStart={coldStart}
-        onRetry={() => void rideQuery.refetch()}
-      />
+      <PageContainer className="flex flex-1 items-center">
+        <ErrorBanner
+          message="We can't reach the server. Retry."
+          coldStart={coldStart}
+          onRetry={() => void rideQuery.refetch()}
+        />
+      </PageContainer>
     );
   }
 
@@ -189,21 +229,120 @@ export function RidePage() {
   const zoneName = (code: string) => zones.find((zone) => zone.code === code)?.name ?? code;
 
   return (
-    <div className="max-w-md space-y-4">
-      <Link
-        to="/p"
-        className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text"
-      >
-        <ArrowLeft size={15} strokeWidth={2.25} />
-        Back
-      </Link>
+    <>
+      <Workspace
+        panel={
+          <div className="flex h-full flex-col">
+            <Link
+              to="/p"
+              className="inline-flex w-fit items-center gap-1 text-sm text-text-muted hover:text-text"
+            >
+              <ArrowLeft size={15} strokeWidth={2.25} />
+              Back
+            </Link>
 
-      <Card>
-        <p className="font-display text-lg font-semibold text-text">
-          {zoneName(ride.pickupZone)} → {zoneName(ride.dropoffZone)}
-        </p>
-        <div className="mt-4 h-40 overflow-hidden rounded-xl border border-border">
-          <Suspense fallback={<Skeleton className="h-full w-full" />}>
+            <p className="mt-3 text-xs font-medium uppercase tracking-wide text-text-faint">
+              {zoneName(ride.pickupZone)} → {zoneName(ride.dropoffZone)}
+            </p>
+            <h1 className="mt-1 text-balance font-display text-2xl font-bold text-text">
+              {statusSentence(ride, zoneName(ride.pickupZone), zoneName(ride.dropoffZone))}
+            </h1>
+
+            <div className="mt-5">
+              <StatusStepper status={ride.status} />
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <FareCard
+                soloFarePaisa={ride.soloFarePaisa}
+                pooledFarePaisa={ride.pooledFarePaisa}
+                isFinal={ride.status === "STARTED" || ride.status === "COMPLETED"}
+                pooled={(ride.pool?.sharedWithCount ?? 0) > 0}
+              />
+
+              {ride.pool && (
+                <Card>
+                  <p className="text-sm font-medium text-text">
+                    {ride.pool.vehicleName} · {ride.pool.driverFirstName}
+                  </p>
+                  <div className="mt-2">
+                    <SeatMeter
+                      capacity={ride.pool.capacitySnapshot}
+                      reserved={ride.pool.seatsReserved}
+                    />
+                  </div>
+                  <p className="mt-1 text-sm text-text-muted">
+                    {ride.pool.sharedWithCount > 0
+                      ? `Shared with ${ride.pool.sharedWithCount} other rider${ride.pool.sharedWithCount > 1 ? "s" : ""}`
+                      : "No one else aboard yet"}
+                  </p>
+                </Card>
+              )}
+
+              {ride.status === "REQUESTED" && (
+                <div>
+                  <h2 className="text-sm font-semibold text-text">Nearby Teslas</h2>
+                  {offersQuery.isPending ? (
+                    <Skeleton className="mt-2 h-16 rounded-xl" />
+                  ) : offersQuery.isError ? (
+                    <ErrorBanner
+                      message="Couldn't load offers."
+                      onRetry={() => void offersQuery.refetch()}
+                    />
+                  ) : offersQuery.data.length === 0 ? (
+                    <div className="mt-2">
+                      <EmptyState
+                        icon={Clock}
+                        title="Waiting for a driver in your zone"
+                        description="We'll show every compatible Tesla here the moment one opens up nearby."
+                      />
+                    </div>
+                  ) : (
+                    <ul className="mt-2 space-y-2">
+                      <AnimatePresence initial={false}>
+                        {offersQuery.data.map((offer) => (
+                          <OfferRow key={offer.poolId} offer={offer} rideId={ride.id} />
+                        ))}
+                      </AnimatePresence>
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {CANCELLABLE_STATUSES.has(ride.status) && (
+                <Button
+                  variant="danger"
+                  className="w-full"
+                  onClick={() => setConfirmCancelOpen(true)}
+                >
+                  Cancel ride
+                </Button>
+              )}
+
+              <details className="group rounded-xl border border-border">
+                <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-2.5 text-sm font-semibold text-text">
+                  Trip details
+                  <ChevronDown
+                    size={16}
+                    strokeWidth={2.25}
+                    className="text-text-faint transition-transform group-open:rotate-180"
+                  />
+                </summary>
+                <div className="border-t border-border px-3.5 py-3">
+                  {historyQuery.isPending ? (
+                    <Skeleton className="h-16 rounded-lg" />
+                  ) : historyQuery.isError ? (
+                    <p className="text-sm text-text-muted">Couldn't load the timeline.</p>
+                  ) : (
+                    <Timeline entries={historyQuery.data} />
+                  )}
+                </div>
+              </details>
+            </div>
+          </div>
+        }
+        map={
+          <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
             <ZoneMap
               className="h-full w-full"
               interactive={false}
@@ -214,83 +353,8 @@ export function RidePage() {
               ]}
             />
           </Suspense>
-        </div>
-        <div className="mt-4">
-          <StatusStepper status={ride.status} />
-        </div>
-      </Card>
-
-      {ride.pool && (
-        <Card>
-          <p className="text-sm font-medium text-text">
-            {ride.pool.vehicleName} · {ride.pool.driverFirstName}
-          </p>
-          <div className="mt-2">
-            <SeatMeter capacity={ride.pool.capacitySnapshot} reserved={ride.pool.seatsReserved} />
-          </div>
-          <p className="mt-1 text-sm text-text-muted">
-            {ride.pool.sharedWithCount > 0
-              ? `Shared with ${ride.pool.sharedWithCount} other rider${ride.pool.sharedWithCount > 1 ? "s" : ""}`
-              : "No one else aboard yet"}
-          </p>
-        </Card>
-      )}
-
-      <FareCard
-        soloFarePaisa={ride.soloFarePaisa}
-        pooledFarePaisa={ride.pooledFarePaisa}
-        isFinal={ride.status === "STARTED" || ride.status === "COMPLETED"}
-        pooled={(ride.pool?.sharedWithCount ?? 0) > 0}
+        }
       />
-
-      {ride.status === "REQUESTED" && (
-        <div>
-          <h2 className="text-sm font-semibold text-text">Nearby Teslas</h2>
-          {offersQuery.isPending ? (
-            <Skeleton className="mt-2 h-16 rounded-xl" />
-          ) : offersQuery.isError ? (
-            <ErrorBanner
-              message="Couldn't load offers."
-              onRetry={() => void offersQuery.refetch()}
-            />
-          ) : offersQuery.data.length === 0 ? (
-            <div className="mt-2">
-              <EmptyState
-                icon={Clock}
-                title="Waiting for a driver in your zone"
-                description="We'll show every compatible Tesla here the moment one opens up nearby."
-              />
-            </div>
-          ) : (
-            <ul className="mt-2 space-y-2">
-              <AnimatePresence initial={false}>
-                {offersQuery.data.map((offer) => (
-                  <OfferRow key={offer.poolId} offer={offer} rideId={ride.id} />
-                ))}
-              </AnimatePresence>
-            </ul>
-          )}
-        </div>
-      )}
-
-      {CANCELLABLE_STATUSES.has(ride.status) && (
-        <Button variant="danger" className="w-full" onClick={() => setConfirmCancelOpen(true)}>
-          Cancel ride
-        </Button>
-      )}
-
-      <Card>
-        <h2 className="text-sm font-semibold text-text">Timeline</h2>
-        <div className="mt-3">
-          {historyQuery.isPending ? (
-            <Skeleton className="h-16 rounded-lg" />
-          ) : historyQuery.isError ? (
-            <p className="text-sm text-text-muted">Couldn't load the timeline.</p>
-          ) : (
-            <Timeline entries={historyQuery.data} />
-          )}
-        </div>
-      </Card>
 
       <Modal
         open={confirmCancelOpen}
@@ -319,6 +383,6 @@ export function RidePage() {
           </p>
         )}
       </Modal>
-    </div>
+    </>
   );
 }

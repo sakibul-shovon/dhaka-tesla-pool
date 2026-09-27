@@ -252,7 +252,7 @@ describe("GET /admin/users/:id", () => {
       .set("Cookie", admin.cookie);
     expect(res.status).toBe(200);
     expect(res.body.data.statusHistory).toHaveLength(2);
-    expect(res.body.data.statusHistory[0].toStatus).toBe("ACTIVE"); // newest first
-    expect(res.body.data.statusHistory[1].toStatus).toBe("SUSPENDED");
+    expect(res.body.data.statusHistory[0].toStatus).toBe("SUSPENDED"); // oldest first, chronological
+    expect(res.body.data.statusHistory[1].toStatus).toBe("ACTIVE");
   });
 });

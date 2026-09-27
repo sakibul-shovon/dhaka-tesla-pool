@@ -6,6 +6,8 @@ export class ApiError extends Error {
     public readonly code: string,
     message: string,
     public readonly details?: Record<string, unknown>,
+    /** From the `Retry-After` header on 429/503 responses (plan §12.3) — seconds, when the server sent one. */
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
   }
@@ -24,6 +26,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   ACTIVE_RIDE_EXISTS: "You already have a ride in progress.",
   REQUEST_NOT_OPEN: "This ride was already matched or cancelled.",
   CANCELLATION_NOT_ALLOWED: "Your ride has already started and can't be cancelled.",
+  INSUFFICIENT_BALANCE:
+    "Your TeslaPay balance is too low for this fare — top up or pay cash instead.",
+  POOL_CAPACITY_EXCEEDED: "That seat was just taken. Here are the current options.",
+  POOL_NOT_ACCEPTING: "This Tesla is no longer taking passengers.",
+  POOL_INCOMPATIBLE: "This Tesla's route no longer suits your trip.",
   INVALID_TRANSITION: "The ride has moved on — refreshing.",
   SERVICE_UNAVAILABLE: "We can't reach the server. Retry.",
   SERVICE_BUSY: "Busy right now — retrying…",
@@ -85,11 +92,14 @@ async function send(path: string, config: RequestConfig): Promise<unknown> {
   if (!res.ok) {
     const envelope = json as ErrorEnvelope | null;
     const err = envelope?.error;
+    const retryAfterHeader = res.headers.get("Retry-After");
+    const retryAfterSeconds = retryAfterHeader === null ? NaN : Number(retryAfterHeader);
     throw new ApiError(
       res.status,
       err?.code ?? "INTERNAL_ERROR",
       err?.message ?? "Something went wrong.",
       err?.details,
+      Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined,
     );
   }
 

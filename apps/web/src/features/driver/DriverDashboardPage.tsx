@@ -1,45 +1,49 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Car, Inbox } from "lucide-react";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
-import { createRefetchInterval, POLL_BASE_MS } from "../../lib/polling.js";
-import type { AcceptResult, DriverStatus, RelevantRequest, Zone } from "../../lib/types.js";
+import { createRefetchInterval, isColdStart, POLL_BASE_MS } from "../../lib/polling.js";
+import { useZones } from "../../lib/zones.js";
+import type { AcceptResult, DriverStatus, RelevantRequest } from "../../lib/types.js";
 import { ErrorBanner } from "../../components/ui/ErrorBanner.js";
+import { Card } from "../../components/ui/Card.js";
+import { Button } from "../../components/ui/Button.js";
+import { Badge } from "../../components/ui/Badge.js";
+import { Skeleton } from "../../components/ui/Skeleton.js";
+import { EmptyState } from "../../components/ui/EmptyState.js";
+import { ZonePicker } from "../../components/map/ZonePicker.js";
 
-function GoOnlineForm({ onGoOnline, isPending }: { onGoOnline: (zone: string) => void; isPending: boolean }) {
+function GoOnlineForm({
+  onGoOnline,
+  isPending,
+}: {
+  onGoOnline: (zone: string) => void;
+  isPending: boolean;
+}) {
+  const zonesQuery = useZones();
   const [zone, setZone] = useState("");
-  const zonesQuery = useQuery({ queryKey: ["zones"], queryFn: ({ signal }) => api.get<Zone[]>("/zones", signal) });
 
   return (
     <form
-      className="flex items-center gap-2"
+      className="space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (zone) onGoOnline(zone);
       }}
     >
-      <select
-        required
+      <ZonePicker
+        id="current-zone"
+        label="Current zone"
+        tone="driver"
         value={zone}
-        onChange={(event) => setZone(event.target.value)}
-        className="rounded border border-neutral-300 px-3 py-2 text-sm"
-      >
-        <option value="" disabled>
-          Current zone
-        </option>
-        {(zonesQuery.data ?? []).map((z) => (
-          <option key={z.code} value={z.code}>
-            {z.name}
-          </option>
-        ))}
-      </select>
-      <button
-        type="submit"
-        disabled={isPending || !zone}
-        className="rounded bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-      >
+        onChange={setZone}
+        zones={zonesQuery.data}
+        placeholder="Where are you now?"
+      />
+      <Button type="submit" disabled={isPending || !zone} className="w-full">
         {isPending ? "Going online…" : "Go online"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -52,7 +56,8 @@ function RequestRow({ request }: { request: RelevantRequest }) {
   const intentKey = useMemo(() => crypto.randomUUID(), [request.id]);
 
   const accept = useMutation({
-    mutationFn: () => api.post<AcceptResult>(`/driver/requests/${request.id}/accept`, {}, intentKey),
+    mutationFn: () =>
+      api.post<AcceptResult>(`/driver/requests/${request.id}/accept`, {}, intentKey),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["driver", "status"] });
       queryClient.invalidateQueries({ queryKey: ["driver", "requests"] });
@@ -60,31 +65,29 @@ function RequestRow({ request }: { request: RelevantRequest }) {
   });
 
   return (
-    <li className="rounded-lg border border-neutral-200 bg-white p-3">
+    <Card className="p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-neutral-900">
+          <p className="text-sm font-medium text-text">
             {request.pickupZone} → {request.dropoffZone}
           </p>
-          <p className="text-xs text-neutral-500">
-            {request.seats} seat{request.seats > 1 ? "s" : ""} · {(request.distanceDkm / 10).toFixed(1)} km
+          <p className="text-xs text-text-muted">
+            {request.seats} seat{request.seats > 1 ? "s" : ""} ·{" "}
+            {(request.distanceDkm / 10).toFixed(1)} km
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => accept.mutate()}
-          disabled={accept.isPending}
-          className="flex-none rounded bg-accent px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
-        >
+        <Button onClick={() => accept.mutate()} disabled={accept.isPending} className="flex-none">
           {accept.isPending ? "Accepting…" : "Accept"}
-        </button>
+        </Button>
       </div>
       {accept.isError && (
-        <p className="mt-2 text-xs text-red-600">
-          {accept.error instanceof ApiError ? messageForError(accept.error.code, accept.error.message) : "Something went wrong."}
+        <p className="mt-2 text-xs text-danger">
+          {accept.error instanceof ApiError
+            ? messageForError(accept.error.code, accept.error.message)
+            : "Something went wrong."}
         </p>
       )}
-    </li>
+    </Card>
   );
 }
 
@@ -118,12 +121,21 @@ export function DriverDashboardPage() {
   });
 
   if (statusQuery.isPending) {
-    return <div className="h-40 max-w-md animate-pulse rounded-lg bg-neutral-100" />;
+    return (
+      <div className="max-w-md space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-32 rounded-2xl" />
+      </div>
+    );
   }
 
   if (statusQuery.isError) {
     return (
-      <ErrorBanner message="We can't reach the server. Retry." onRetry={() => void statusQuery.refetch()} />
+      <ErrorBanner
+        message="We can't reach the server. Retry."
+        coldStart={isColdStart(statusQuery as never)}
+        onRetry={() => void statusQuery.refetch()}
+      />
     );
   }
 
@@ -131,61 +143,84 @@ export function DriverDashboardPage() {
 
   return (
     <div className="max-w-md space-y-4">
-      <h1 className="text-lg font-bold text-neutral-900">
-        {status.name} · capacity {status.capacity}
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="font-display text-xl font-bold text-text">
+          {status.name} <span className="text-text-faint">· capacity {status.capacity}</span>
+        </h1>
+        <Badge tone={status.isOnline ? "success" : "neutral"}>
+          {status.isOnline ? "Online" : "Offline"}
+        </Badge>
+      </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4">
+      <Card>
         {status.isOnline ? (
           <div className="flex items-center justify-between">
-            <p className="text-sm text-neutral-700">
-              Online in <span className="font-medium">{status.currentZone}</span>
+            <p className="text-sm text-text-muted">
+              In zone <span className="font-medium text-text">{status.currentZone}</span>
             </p>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => goOffline.mutate()}
               disabled={goOffline.isPending || Boolean(status.activePoolId)}
               title={status.activePoolId ? "Finish or cancel the active pool first" : undefined}
-              className="rounded border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 disabled:opacity-40"
             >
               {goOffline.isPending ? "Going offline…" : "Go offline"}
-            </button>
+            </Button>
           </div>
         ) : (
-          <GoOnlineForm onGoOnline={(zone) => goOnline.mutate(zone)} isPending={goOnline.isPending} />
+          <GoOnlineForm
+            onGoOnline={(zone) => goOnline.mutate(zone)}
+            isPending={goOnline.isPending}
+          />
         )}
         {(goOnline.isError || goOffline.isError) && (
-          <p className="mt-2 text-sm text-red-600">
+          <p className="mt-2 text-sm text-danger">
             {(() => {
               const error = goOnline.error ?? goOffline.error;
-              return error instanceof ApiError ? messageForError(error.code, error.message) : "Something went wrong.";
+              return error instanceof ApiError
+                ? messageForError(error.code, error.message)
+                : "Something went wrong.";
             })()}
           </p>
         )}
-      </div>
+      </Card>
 
       {status.activePoolId && (
-        <Link
-          to={`/d/pools/${status.activePoolId}`}
-          className="block rounded-lg border border-accent bg-accent-soft p-4 text-sm font-medium text-neutral-900"
-        >
-          View active pool →
+        <Link to={`/d/pools/${status.activePoolId}`}>
+          <Card className="flex items-center justify-between border-accent bg-accent-soft">
+            <span className="flex items-center gap-2 text-sm font-medium text-text">
+              <Car size={16} strokeWidth={2.25} />
+              View active pool
+            </span>
+            <ArrowRight size={16} strokeWidth={2.25} className="text-text-muted" />
+          </Card>
         </Link>
       )}
 
       {status.isOnline && (
         <div>
-          <h2 className="text-sm font-semibold text-neutral-900">Nearby requests</h2>
+          <h2 className="text-sm font-semibold text-text">Nearby requests</h2>
           {requestsQuery.isPending ? (
-            <div className="mt-2 h-16 animate-pulse rounded-lg bg-neutral-100" />
+            <Skeleton className="mt-2 h-16 rounded-xl" />
           ) : requestsQuery.isError ? (
-            <ErrorBanner message="Couldn't load requests." onRetry={() => void requestsQuery.refetch()} />
+            <ErrorBanner
+              message="Couldn't load requests."
+              onRetry={() => void requestsQuery.refetch()}
+            />
           ) : requestsQuery.data.length === 0 ? (
-            <p className="mt-2 text-sm text-neutral-500">No requests in {status.currentZone} right now.</p>
+            <div className="mt-2">
+              <EmptyState
+                icon={Inbox}
+                title="No requests right now"
+                description={`Nothing waiting in ${status.currentZone} yet.`}
+              />
+            </div>
           ) : (
             <ul className="mt-2 space-y-2">
               {requestsQuery.data.map((request) => (
-                <RequestRow key={request.id} request={request} />
+                <li key={request.id}>
+                  <RequestRow request={request} />
+                </li>
               ))}
             </ul>
           )}

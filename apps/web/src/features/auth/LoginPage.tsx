@@ -1,8 +1,14 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Zap } from "lucide-react";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
+import { useRetryCountdown } from "../../lib/useRetryCountdown.js";
 import { ErrorBanner } from "../../components/ui/ErrorBanner.js";
+import { Card } from "../../components/ui/Card.js";
+import { Input } from "../../components/ui/Input.js";
+import { Button } from "../../components/ui/Button.js";
+import { useToast } from "../../components/ui/Toast.js";
 import type { User } from "../../lib/types.js";
 
 export function LoginPage() {
@@ -11,7 +17,16 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const justRegistered = (location.state as { justRegistered?: boolean } | null)?.justRegistered ?? false;
+
+  useEffect(() => {
+    if (justRegistered) {
+      showToast({ message: "Account created — sign in below.", tone: "success" });
+    }
+    // Fire once for the arrival that carried this state, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const login = useMutation({
     mutationFn: () => api.post<User>("/auth/login", { email, password }),
@@ -21,68 +36,75 @@ export function LoginPage() {
     },
   });
 
+  const retrySeconds = useRetryCountdown(login.error);
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     login.mutate();
   }
 
   return (
-    <div className="mx-auto mt-16 max-w-sm rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
-      <h1 className="text-xl font-bold text-neutral-900">Dhaka Tesla Pool</h1>
-      <p className="mt-1 text-sm text-neutral-500">Share a seat. Split the fare.</p>
+    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4 py-12">
+      <Link to="/" className="mx-auto mb-6 flex items-center gap-2 font-display font-semibold text-text">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-on-accent">
+          <Zap size={17} strokeWidth={2.5} fill="currentColor" />
+        </span>
+        Dhaka Tesla Pool
+      </Link>
 
-      {justRegistered && (
-        <p className="mt-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
-          Account created — sign in below.
-        </p>
-      )}
+      <Card>
+        <h1 className="font-display text-xl font-bold text-text">Welcome back</h1>
+        <p className="mt-1 text-sm text-text-muted">Sign in to request or manage your ride.</p>
 
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-        <label className="block text-sm text-neutral-700">
-          Email
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </label>
-        <label className="block text-sm text-neutral-700">
-          Password
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </label>
+        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+          <div className="space-y-1.5">
+            <label htmlFor="email" className="block text-sm font-medium text-text">
+              Email
+            </label>
+            <Input
+              id="email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="password" className="block text-sm font-medium text-text">
+              Password
+            </label>
+            <Input
+              id="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </div>
 
-        {login.isError && (
-          <ErrorBanner
-            message={
-              login.error instanceof ApiError
-                ? messageForError(login.error.code, login.error.message)
-                : "Something went wrong."
-            }
-          />
-        )}
+          {login.isError && (
+            <ErrorBanner
+              message={
+                retrySeconds
+                  ? `Too many attempts. Try again in ${retrySeconds}s.`
+                  : login.error instanceof ApiError
+                    ? messageForError(login.error.code, login.error.message)
+                    : "Something went wrong."
+              }
+            />
+          )}
 
-        <button
-          type="submit"
-          disabled={login.isPending}
-          className="w-full rounded bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-        >
-          {login.isPending ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+          <Button type="submit" disabled={login.isPending || Boolean(retrySeconds)} className="w-full">
+            {login.isPending ? "Signing in…" : "Sign in"}
+          </Button>
+        </form>
+      </Card>
 
-      <p className="mt-4 text-center text-sm text-neutral-500">
+      <p className="mt-5 text-center text-sm text-text-muted">
         New here?{" "}
-        <Link to="/register" className="font-medium text-accent underline">
+        <Link to="/register" className="font-medium text-accent-strong hover:underline">
           Create an account
         </Link>
       </p>

@@ -25,7 +25,8 @@ export interface Driver {
   vehicle: DriverVehicle;
 }
 
-export type RideStatus = "REQUESTED" | "MATCHED" | "DRIVER_ARRIVED" | "STARTED" | "COMPLETED" | "CANCELLED";
+export type RideStatus =
+  "REQUESTED" | "MATCHED" | "DRIVER_ARRIVED" | "STARTED" | "COMPLETED" | "CANCELLED";
 
 export interface RideRequest {
   id: string;
@@ -86,13 +87,30 @@ export interface Zone {
   yDkm: number;
 }
 
+export interface WalletSummary {
+  balancePaisa: number;
+}
+
+export interface WalletTransaction {
+  id: string;
+  type: "TOPUP" | "DEBIT";
+  amountPaisa: number;
+  rideRequestId: string | null;
+  createdAt: string;
+}
+
 export interface FareQuote {
   distanceDkm: number;
   soloFarePaisa: number;
   pooledFarePaisa: number;
 }
 
-export const ACTIVE_RIDE_STATUSES: readonly RideStatus[] = ["REQUESTED", "MATCHED", "DRIVER_ARRIVED", "STARTED"];
+export const ACTIVE_RIDE_STATUSES: readonly RideStatus[] = [
+  "REQUESTED",
+  "MATCHED",
+  "DRIVER_ARRIVED",
+  "STARTED",
+];
 export const TERMINAL_RIDE_STATUSES: readonly RideStatus[] = ["COMPLETED", "CANCELLED"];
 
 export interface DriverStatus {

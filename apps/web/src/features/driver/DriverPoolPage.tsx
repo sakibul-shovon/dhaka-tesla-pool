@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronDown } from "lucide-react";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
 import { createRefetchInterval, isColdStart, POLL_BASE_MS } from "../../lib/polling.js";
 import { useZones } from "../../lib/zones.js";
@@ -12,6 +12,8 @@ import {
   type PoolMember,
   type PoolStatusHistoryEntry,
 } from "../../lib/types.js";
+import { Workspace } from "../../components/layout/Workspace.js";
+import { PageContainer } from "../../components/layout/PageContainer.js";
 import { SeatMeter } from "../../components/ui/SeatMeter.js";
 import { Timeline } from "../../components/ui/Timeline.js";
 import { ErrorBanner } from "../../components/ui/ErrorBanner.js";
@@ -113,6 +115,22 @@ function MemberRow({
   );
 }
 
+function PoolSkeleton() {
+  return (
+    <Workspace
+      panel={
+        <div className="space-y-4">
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-8 w-3/4" />
+          <Skeleton className="h-16 rounded-2xl" />
+          <Skeleton className="h-24 rounded-2xl" />
+        </div>
+      }
+      map={<Skeleton className="h-full w-full rounded-none" />}
+    />
+  );
+}
+
 export function DriverPoolPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -165,21 +183,18 @@ export function DriverPoolPage() {
   });
 
   if (poolQuery.isPending) {
-    return (
-      <div className="max-w-md space-y-4">
-        <Skeleton className="h-6 w-20" />
-        <Skeleton className="h-48 rounded-2xl" />
-      </div>
-    );
+    return <PoolSkeleton />;
   }
 
   if (poolQuery.isError) {
     return (
-      <ErrorBanner
-        message="We can't reach the server. Retry."
-        coldStart={isColdStart(poolQuery as never)}
-        onRetry={() => void poolQuery.refetch()}
-      />
+      <PageContainer className="flex flex-1 items-center">
+        <ErrorBanner
+          message="We can't reach the server. Retry."
+          coldStart={isColdStart(poolQuery as never)}
+          onRetry={() => void poolQuery.refetch()}
+        />
+      </PageContainer>
     );
   }
 
@@ -193,24 +208,112 @@ export function DriverPoolPage() {
   ];
 
   return (
-    <div className="max-w-md space-y-4">
-      <Link
-        to="/d"
-        className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text"
-      >
-        <ArrowLeft size={15} strokeWidth={2.25} />
-        Back
-      </Link>
+    <>
+      <Workspace
+        panel={
+          <div className="flex h-full flex-col">
+            <Link
+              to="/d"
+              className="inline-flex w-fit items-center gap-1 text-sm text-text-muted hover:text-text"
+            >
+              <ArrowLeft size={15} strokeWidth={2.25} />
+              Back
+            </Link>
 
-      <Card>
-        <div className="flex items-center justify-between">
-          <p className="font-display text-lg font-semibold text-text">
-            Pickup: {zoneName(pool.pickupZone)}
-          </p>
-          <Badge tone="accent">{pool.status.replace("_", " ").toLowerCase()}</Badge>
-        </div>
-        <div className="mt-3 h-40 overflow-hidden rounded-xl border border-border">
-          <Suspense fallback={<Skeleton className="h-full w-full" />}>
+            <div className="mt-3 flex items-center justify-between">
+              <h1 className="font-display text-2xl font-bold text-text">
+                Pickup: {zoneName(pool.pickupZone)}
+              </h1>
+              <Badge tone="accent">{pool.status.replace("_", " ").toLowerCase()}</Badge>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-border bg-surface-raised p-4">
+              <SeatMeter capacity={pool.capacitySnapshot} reserved={pool.seatsReserved} size="lg" />
+            </div>
+
+            {actionError && (
+              <p className="mt-3 text-sm text-danger">
+                {actionError instanceof ApiError
+                  ? messageForError(actionError.code, actionError.message)
+                  : "Something went wrong."}
+              </p>
+            )}
+
+            <div className="mt-5 flex-1 space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-text">Passengers</h2>
+                <ul className="mt-2 space-y-2">
+                  {members.map((member) => (
+                    <li key={member.membershipId}>
+                      <MemberRow poolId={pool.id} poolStatus={pool.status} member={member} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <details className="group rounded-xl border border-border">
+                <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-2.5 text-sm font-semibold text-text">
+                  Trip details
+                  <ChevronDown
+                    size={16}
+                    strokeWidth={2.25}
+                    className="text-text-faint transition-transform group-open:rotate-180"
+                  />
+                </summary>
+                <div className="border-t border-border px-3.5 py-3">
+                  {historyQuery.isPending ? (
+                    <Skeleton className="h-16 rounded-lg" />
+                  ) : historyQuery.isError ? (
+                    <p className="text-sm text-text-muted">Couldn't load the timeline.</p>
+                  ) : (
+                    <Timeline entries={historyQuery.data} />
+                  )}
+                </div>
+              </details>
+            </div>
+
+            {/* One prominent next action, pinned to the bottom of the panel
+                (plan round 3 §3: "Arrive → Start → Drop-offs") — drop-offs
+                themselves happen per passenger above once the trip starts,
+                so there's nothing pool-level left to press at that point. */}
+            <div className="sticky bottom-0 -mx-4 mt-5 space-y-2 border-t border-border bg-bg px-4 pt-3 pb-1 sm:-mx-6 sm:px-6">
+              {pool.status === "OPEN" && (
+                <Button
+                  onClick={() => arrive.mutate()}
+                  disabled={arrive.isPending}
+                  className="w-full"
+                >
+                  {arrive.isPending ? "Marking arrived…" : "I've arrived"}
+                </Button>
+              )}
+              {pool.status === "DRIVER_ARRIVED" && (
+                <Button
+                  onClick={() => start.mutate()}
+                  disabled={start.isPending}
+                  className="w-full"
+                >
+                  {start.isPending ? "Starting…" : "Start trip"}
+                </Button>
+              )}
+              {pool.status === "STARTED" && (
+                <p className="py-2 text-center text-sm text-text-muted">
+                  Drop each passenger off above as you complete their trip.
+                </p>
+              )}
+              {canCancel && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancelOpen(true)}
+                  className="w-full py-1.5 text-center text-sm font-medium text-danger hover:underline"
+                >
+                  Cancel pool
+                </button>
+              )}
+            </div>
+          </div>
+        }
+        map={
+          <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
             <ZoneMap
               className="h-full w-full"
               interactive={false}
@@ -224,60 +327,8 @@ export function DriverPoolPage() {
               ]}
             />
           </Suspense>
-        </div>
-        <div className="mt-4">
-          <SeatMeter capacity={pool.capacitySnapshot} reserved={pool.seatsReserved} />
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {pool.status === "OPEN" && (
-            <Button onClick={() => arrive.mutate()} disabled={arrive.isPending}>
-              {arrive.isPending ? "Marking arrived…" : "I've arrived"}
-            </Button>
-          )}
-          {pool.status === "DRIVER_ARRIVED" && (
-            <Button onClick={() => start.mutate()} disabled={start.isPending}>
-              {start.isPending ? "Starting…" : "Start trip"}
-            </Button>
-          )}
-          {canCancel && (
-            <Button variant="danger" onClick={() => setConfirmCancelOpen(true)}>
-              Cancel pool
-            </Button>
-          )}
-        </div>
-        {actionError && (
-          <p className="mt-2 text-sm text-danger">
-            {actionError instanceof ApiError
-              ? messageForError(actionError.code, actionError.message)
-              : "Something went wrong."}
-          </p>
-        )}
-      </Card>
-
-      <div>
-        <h2 className="text-sm font-semibold text-text">Passengers</h2>
-        <ul className="mt-2 space-y-2">
-          {members.map((member) => (
-            <li key={member.membershipId}>
-              <MemberRow poolId={pool.id} poolStatus={pool.status} member={member} />
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <Card>
-        <h2 className="text-sm font-semibold text-text">Timeline</h2>
-        <div className="mt-3">
-          {historyQuery.isPending ? (
-            <Skeleton className="h-16 rounded-lg" />
-          ) : historyQuery.isError ? (
-            <p className="text-sm text-text-muted">Couldn't load the timeline.</p>
-          ) : (
-            <Timeline entries={historyQuery.data} />
-          )}
-        </div>
-      </Card>
+        }
+      />
 
       <Modal
         open={confirmCancelOpen}
@@ -320,6 +371,6 @@ export function DriverPoolPage() {
           </p>
         )}
       </Modal>
-    </div>
+    </>
   );
 }

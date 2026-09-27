@@ -16,14 +16,13 @@ import {
 } from "lucide-react";
 import { formatPaisaAsTaka, paisa } from "@dhaka-tesla-pool/shared";
 import { useZones } from "../../lib/zones.js";
+import { saveQuickTrip } from "../../lib/quickTrip.js";
 import { ZoneDiagram } from "../../components/map/ZoneDiagram.js";
 import { SeatMeter } from "../../components/ui/SeatMeter.js";
 import { Button } from "../../components/ui/Button.js";
 import { Select } from "../../components/ui/Select.js";
 import { SectionHeader } from "../../components/layout/SectionHeader.js";
 import rickshawPhoto from "../../assets/rickshaw-tesla.png";
-
-const QUICK_TRIP_KEY = "dtp-quick-trip";
 
 const HOW_IT_WORKS = [
   {
@@ -66,11 +65,7 @@ function QuickTripWidget() {
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    try {
-      sessionStorage.setItem(QUICK_TRIP_KEY, JSON.stringify({ pickup, dropoff }));
-    } catch {
-      // Best-effort prefill only — registration still works without it.
-    }
+    saveQuickTrip({ pickup, dropoff });
     navigate("/register");
   }
 

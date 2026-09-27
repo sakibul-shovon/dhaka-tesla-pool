@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { AuthProvider } from "./auth-context.js";
+import { ThemeProvider } from "./theme.js";
 import { ToastProvider } from "../components/ui/Toast.js";
 
 export function AppProviders({ children }: { children: ReactNode }) {
@@ -28,9 +29,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
           app should respect the OS reduced-motion setting without each
           component having to opt in individually. */}
       <MotionConfig reducedMotion="user">
-        <ToastProvider>
-          <AuthProvider>{children}</AuthProvider>
-        </ToastProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </ToastProvider>
+        </ThemeProvider>
       </MotionConfig>
     </QueryClientProvider>
   );

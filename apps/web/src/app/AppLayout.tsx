@@ -6,6 +6,7 @@ import { Car, Clock, LogOut, Menu, Users, Wallet, X, Zap } from "lucide-react";
 import { api } from "../lib/api-client.js";
 import { useAuth } from "./auth-context.js";
 import { homePathForRole } from "./roles.js";
+import { ThemeToggle } from "../components/ui/ThemeToggle.js";
 
 interface NavItem {
   to: string;
@@ -80,8 +81,8 @@ export function AppLayout() {
   });
 
   return (
-    <div className="min-h-screen bg-bg">
-      <header className="sticky top-0 z-20 border-b border-border bg-bg/90 backdrop-blur">
+    <div className="flex min-h-screen flex-col bg-bg">
+      <header className="sticky top-0 z-20 flex-none border-b border-border bg-bg/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
           <Link
             to={homePathForRole(user?.role ?? "PASSENGER")}
@@ -100,6 +101,7 @@ export function AppLayout() {
                 {label}
               </NavLink>
             ))}
+            <ThemeToggle className="ml-1" />
             <span
               className="mx-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-surface-raised text-xs font-semibold text-text-muted"
               title={user?.name}
@@ -158,22 +160,28 @@ export function AppLayout() {
                     </span>
                     {user?.name}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => logout.mutate()}
-                    disabled={logout.isPending}
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-text-muted transition-colors hover:bg-surface-raised hover:text-text disabled:opacity-50"
-                  >
-                    <LogOut size={15} strokeWidth={2.25} />
-                    Sign out
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <ThemeToggle />
+                    <button
+                      type="button"
+                      onClick={() => logout.mutate()}
+                      disabled={logout.isPending}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-text-muted transition-colors hover:bg-surface-raised hover:text-text disabled:opacity-50"
+                    >
+                      <LogOut size={15} strokeWidth={2.25} />
+                      Sign out
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.nav>
           )}
         </AnimatePresence>
       </header>
-      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Full-bleed on purpose (plan round 3 §2/§3) — every page picks its own
+          template (Workspace or PageContainer) instead of main imposing one
+          width for both a map-filled workspace and a centred content page. */}
+      <main className="flex min-h-0 flex-1 flex-col">
         <Outlet />
       </main>
     </div>

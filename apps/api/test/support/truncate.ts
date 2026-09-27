@@ -8,6 +8,7 @@ const BUSINESS_TABLES = [
   "idempotency_keys",
   "wallet_transactions",
   "wallets",
+  "account_status_history",
   "pool_status_history",
   "ride_status_history",
   "pool_memberships",

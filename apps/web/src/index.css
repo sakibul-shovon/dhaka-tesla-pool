@@ -57,6 +57,10 @@
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
+:root {
+  color-scheme: light;
+}
+
 /* Dark values for the same tokens — warm charcoal, not pure black, so
    surfaces still read as "material" rather than a void (plan round 3 §5).
    `--color-on-accent` is deliberately absent here: it must stay fixed (see
@@ -64,6 +68,12 @@
    between themes. Every pair re-verified for WCAG AA the same way the
    light palette was (contrast computed directly, no devtools available). */
 .dark {
+  /* Tells the browser to paint its own native controls (a <select>'s
+     dropdown popup, checkboxes, scrollbars) in a dark-appropriate palette --
+     without this, that popup ignores every custom dark-mode style on the
+     page and renders as a plain white list regardless of theme. */
+  color-scheme: dark;
+
   --color-bg: #1b1712;
   --color-surface: #221d16;
   --color-surface-raised: #2b2519;

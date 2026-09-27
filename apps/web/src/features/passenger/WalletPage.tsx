@@ -5,6 +5,7 @@ import { formatPaisaAsTaka, paisa } from "@dhaka-tesla-pool/shared";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
 import { isColdStart } from "../../lib/polling.js";
 import type { WalletSummary, WalletTransaction } from "../../lib/types.js";
+import { PageContainer } from "../../components/layout/PageContainer.js";
 import { Card } from "../../components/ui/Card.js";
 import { Button } from "../../components/ui/Button.js";
 import { Input } from "../../components/ui/Input.js";
@@ -135,68 +136,76 @@ export function WalletPage() {
 
   if (walletQuery.isPending) {
     return (
-      <div className="max-w-md space-y-4">
-        <Skeleton className="h-28 rounded-2xl" />
-        <Skeleton className="h-40 rounded-2xl" />
-      </div>
+      <PageContainer>
+        <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+          <Skeleton className="h-40 rounded-2xl" />
+          <Skeleton className="h-64 rounded-2xl" />
+        </div>
+      </PageContainer>
     );
   }
 
   if (walletQuery.isError) {
     return (
-      <ErrorBanner
-        message="We can't reach the server. Retry."
-        coldStart={isColdStart(walletQuery as never)}
-        onRetry={() => void walletQuery.refetch()}
-      />
+      <PageContainer>
+        <ErrorBanner
+          message="We can't reach the server. Retry."
+          coldStart={isColdStart(walletQuery as never)}
+          onRetry={() => void walletQuery.refetch()}
+        />
+      </PageContainer>
     );
   }
 
   return (
-    <div className="max-w-md space-y-4">
-      <h1 className="font-display text-xl font-bold text-text">TeslaPay</h1>
+    <PageContainer>
+      <h1 className="font-display text-2xl font-bold text-text">TeslaPay</h1>
 
-      <Card>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-faint">
-              <WalletIcon size={13} strokeWidth={2.5} />
-              Balance
-            </p>
-            <p className="tabular mt-1 font-display text-3xl font-bold text-text">
-              {formatPaisaAsTaka(paisa(walletQuery.data.balancePaisa))}
-            </p>
-          </div>
-          <Button onClick={() => setTopUpOpen(true)} icon={<Plus size={15} strokeWidth={2.5} />}>
+      {/* Balance + top-up beside transactions on wide screens (plan round 3
+          §3), stacked on mobile. */}
+      <div className="mt-5 grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
+        <Card>
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-faint">
+            <WalletIcon size={13} strokeWidth={2.5} />
+            Balance
+          </p>
+          <p className="tabular mt-1 font-display text-4xl font-bold text-text">
+            {formatPaisaAsTaka(paisa(walletQuery.data.balancePaisa))}
+          </p>
+          <Button
+            onClick={() => setTopUpOpen(true)}
+            icon={<Plus size={15} strokeWidth={2.5} />}
+            className="mt-4 w-full"
+          >
             Top up
           </Button>
-        </div>
-      </Card>
+        </Card>
 
-      <Card>
-        <h2 className="text-sm font-semibold text-text">Recent activity</h2>
-        {transactionsQuery.isPending ? (
-          <Skeleton className="mt-3 h-24 rounded-lg" />
-        ) : transactionsQuery.isError ? (
-          <p className="mt-2 text-sm text-text-muted">Couldn't load transactions.</p>
-        ) : transactionsQuery.data.length === 0 ? (
-          <div className="mt-3">
-            <EmptyState
-              icon={WalletIcon}
-              title="No activity yet"
-              description="Top up or pay for a ride with TeslaPay to see it here."
-            />
-          </div>
-        ) : (
-          <ul className="mt-1">
-            {transactionsQuery.data.map((transaction) => (
-              <TransactionRow key={transaction.id} transaction={transaction} />
-            ))}
-          </ul>
-        )}
-      </Card>
+        <Card>
+          <h2 className="text-sm font-semibold text-text">Recent activity</h2>
+          {transactionsQuery.isPending ? (
+            <Skeleton className="mt-3 h-24 rounded-lg" />
+          ) : transactionsQuery.isError ? (
+            <p className="mt-2 text-sm text-text-muted">Couldn't load transactions.</p>
+          ) : transactionsQuery.data.length === 0 ? (
+            <div className="mt-3">
+              <EmptyState
+                icon={WalletIcon}
+                title="No activity yet"
+                description="Top up or pay for a ride with TeslaPay to see it here."
+              />
+            </div>
+          ) : (
+            <ul className="mt-1">
+              {transactionsQuery.data.map((transaction) => (
+                <TransactionRow key={transaction.id} transaction={transaction} />
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
 
       <TopUpModal open={topUpOpen} onClose={() => setTopUpOpen(false)} />
-    </div>
+    </PageContainer>
   );
 }

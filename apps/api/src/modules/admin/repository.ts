@@ -1,7 +1,16 @@
-import { and, desc, eq, ilike, lt, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, lt, or } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client.js";
-import { accountStatusHistory, users, vehicles } from "../../db/schema.js";
+import {
+  accountStatusHistory,
+  pools,
+  rideRequests,
+  users,
+  vehicles,
+  zones,
+} from "../../db/schema.js";
 import type { AccountStatus } from "../../domain/account-state-machine.js";
+import { ACTIVE_RIDE_STATUSES } from "../../domain/ride-state-machine.js";
+import { ACTIVE_POOL_STATUSES } from "../../domain/pool-state-machine.js";
 
 export interface DriverSummary {
   id: string;
@@ -118,18 +127,23 @@ export async function listAccountStatusHistory(
   db: Db,
   userId: string,
 ): Promise<AccountStatusHistoryRow[]> {
-  return db
-    .select({
-      id: accountStatusHistory.id,
-      fromStatus: accountStatusHistory.fromStatus,
-      toStatus: accountStatusHistory.toStatus,
-      actorUserId: accountStatusHistory.actorUserId,
-      reason: accountStatusHistory.reason,
-      createdAt: accountStatusHistory.createdAt,
-    })
-    .from(accountStatusHistory)
-    .where(eq(accountStatusHistory.userId, userId))
-    .orderBy(desc(accountStatusHistory.createdAt), desc(accountStatusHistory.id));
+  return (
+    db
+      .select({
+        id: accountStatusHistory.id,
+        fromStatus: accountStatusHistory.fromStatus,
+        toStatus: accountStatusHistory.toStatus,
+        actorUserId: accountStatusHistory.actorUserId,
+        reason: accountStatusHistory.reason,
+        createdAt: accountStatusHistory.createdAt,
+      })
+      .from(accountStatusHistory)
+      .where(eq(accountStatusHistory.userId, userId))
+      // Oldest first, matching listRideStatusHistory/listPoolStatusHistory —
+      // the shared Timeline component reads its entries top-to-bottom as a
+      // chronological story, not newest-first.
+      .orderBy(asc(accountStatusHistory.createdAt), asc(accountStatusHistory.id))
+  );
 }
 
 export function toAccountStatusHistoryDTO(row: AccountStatusHistoryRow) {
@@ -200,5 +214,99 @@ export async function createDriverWithVehicle(db: Db, input: NewDriver): Promise
     capacity: vehicle!.capacity,
     isOnline: vehicle!.isOnline,
     currentZone: vehicle!.currentZone,
+  };
+}
+
+export interface AdminStats {
+  totals: {
+    totalRides: number;
+    activeRides: number;
+    completedRides: number;
+    cancelledRides: number;
+    onlineDrivers: number;
+    activePools: number;
+  };
+  byZone: {
+    zoneCode: string;
+    zoneName: string;
+    onlineDrivers: number;
+    openRequests: number;
+    activePools: number;
+  }[];
+}
+
+// Read-only counts for the admin overview (ADR-019): what actually exists
+// (zone, online/offline, request/pool status), never anything geolocated —
+// there's no coordinate finer than a zone anywhere in this system (plan §4).
+export async function getAdminStats(db: Db): Promise<AdminStats> {
+  const onlineDriverFilter = and(eq(vehicles.isOnline, true), eq(users.status, "ACTIVE"));
+
+  const [
+    totalRidesRow,
+    activeRidesRow,
+    completedRidesRow,
+    cancelledRidesRow,
+    onlineDriversRow,
+    activePoolsRow,
+    zoneRows,
+    onlineDriversByZone,
+    openRequestsByZone,
+    activePoolsByZone,
+  ] = await Promise.all([
+    db.select({ n: count() }).from(rideRequests),
+    db
+      .select({ n: count() })
+      .from(rideRequests)
+      .where(inArray(rideRequests.status, [...ACTIVE_RIDE_STATUSES])),
+    db.select({ n: count() }).from(rideRequests).where(eq(rideRequests.status, "COMPLETED")),
+    db.select({ n: count() }).from(rideRequests).where(eq(rideRequests.status, "CANCELLED")),
+    db
+      .select({ n: count() })
+      .from(vehicles)
+      .innerJoin(users, eq(users.id, vehicles.driverId))
+      .where(onlineDriverFilter),
+    db
+      .select({ n: count() })
+      .from(pools)
+      .where(inArray(pools.status, [...ACTIVE_POOL_STATUSES])),
+    db.select({ code: zones.code, name: zones.name }).from(zones),
+    db
+      .select({ zone: vehicles.currentZone, n: count() })
+      .from(vehicles)
+      .innerJoin(users, eq(users.id, vehicles.driverId))
+      .where(onlineDriverFilter)
+      .groupBy(vehicles.currentZone),
+    db
+      .select({ zone: rideRequests.pickupZone, n: count() })
+      .from(rideRequests)
+      .where(eq(rideRequests.status, "REQUESTED"))
+      .groupBy(rideRequests.pickupZone),
+    db
+      .select({ zone: pools.pickupZone, n: count() })
+      .from(pools)
+      .where(inArray(pools.status, [...ACTIVE_POOL_STATUSES]))
+      .groupBy(pools.pickupZone),
+  ]);
+
+  const onlineByZone = new Map(onlineDriversByZone.map((row) => [row.zone, row.n]));
+  const openRequestsByZoneMap = new Map(openRequestsByZone.map((row) => [row.zone, row.n]));
+  const activePoolsByZoneMap = new Map(activePoolsByZone.map((row) => [row.zone, row.n]));
+
+  return {
+    totals: {
+      totalRides: totalRidesRow[0]?.n ?? 0,
+      activeRides: activeRidesRow[0]?.n ?? 0,
+      completedRides: completedRidesRow[0]?.n ?? 0,
+      cancelledRides: cancelledRidesRow[0]?.n ?? 0,
+      onlineDrivers: onlineDriversRow[0]?.n ?? 0,
+      activePools: activePoolsRow[0]?.n ?? 0,
+    },
+    byZone: zoneRows.map((zone) => ({
+      zoneCode: zone.code,
+      zoneName: zone.name,
+      onlineDrivers: onlineByZone.get(zone.code) ?? 0,
+      openRequests: openRequestsByZoneMap.get(zone.code) ?? 0,
+      activePools: activePoolsByZoneMap.get(zone.code) ?? 0,
+    })),
   };
 }

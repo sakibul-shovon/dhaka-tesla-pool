@@ -14,8 +14,11 @@ assumption in [`docs/ASSUMPTIONS.md`](ASSUMPTIONS.md).
 - **No driver onboarding.** Drivers are provisioned by the seed script only (A3) — there is no
   self-service driver registration, KYC, or vehicle-registration flow. This was a deliberate scope cut
   to avoid an entire review/approval workflow that the PRD doesn't ask for.
-- **No admin surface at all.** Nothing lets an operator suspend a user, adjust a vehicle's capacity,
-  refund a TeslaPay debit, or inspect the system beyond reading the database directly.
+- **Admin panel is deliberately narrow.** It lets an operator inspect the system (overview stats, a user
+  directory, a ride browser with status history) and suspend/reactivate an account, but nothing lets an
+  admin adjust a vehicle's capacity, force-cancel a ride or pool to unblock a suspension, or refund a
+  TeslaPay debit — see [ADR-019](decisions/ADR-019-admin-panel-scope.md) for why each of those was
+  refused rather than built.
 - **Rate limiting only covers `/auth/register` and `/auth/login`.** Every other mutation is still
   protected by authentication, ownership checks, idempotency and the 16 kB body limit, but has no
   per-route request-rate ceiling of its own.

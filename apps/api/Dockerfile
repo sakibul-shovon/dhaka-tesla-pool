@@ -20,7 +20,8 @@ RUN npm ci --omit=dev
 COPY --from=build /repo/packages/shared/dist packages/shared/dist
 COPY --from=build /repo/apps/api/dist apps/api/dist
 COPY --from=build /repo/apps/api/src/db/migrations apps/api/dist/db/migrations
-RUN groupadd --system app && useradd --system --gid app app && chown -R app:app /repo
+COPY apps/api/docker-start.sh apps/api/docker-start.sh
+RUN chmod +x apps/api/docker-start.sh && groupadd --system app && useradd --system --gid app app && chown -R app:app /repo
 USER app
 EXPOSE 4000
 CMD ["node", "apps/api/dist/server.js"]

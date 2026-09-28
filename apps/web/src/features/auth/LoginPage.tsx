@@ -5,6 +5,7 @@ import { api, ApiError, messageForError } from "../../lib/api-client.js";
 import { useRetryCountdown } from "../../lib/useRetryCountdown.js";
 import { ErrorBanner } from "../../components/ui/ErrorBanner.js";
 import { Input } from "../../components/ui/Input.js";
+import { PasswordInput } from "../../components/ui/PasswordInput.js";
 import { Button } from "../../components/ui/Button.js";
 import { useToast } from "../../components/ui/Toast.js";
 import { AuthSplitLayout } from "./AuthSplitLayout.js";
@@ -66,9 +67,8 @@ export function LoginPage() {
           <label htmlFor="password" className="block text-sm font-medium text-text">
             Password
           </label>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             required
             autoComplete="current-password"
             value={password}

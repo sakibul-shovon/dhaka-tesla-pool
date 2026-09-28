@@ -9,6 +9,7 @@ import type { Query } from "@tanstack/react-query";
 export const POLL_BASE_MS = {
   activeRide: 3_000,
   driverPoll: 4_000,
+  adminOverview: 15_000,
 } as const;
 
 const MAX_BACKOFF_MS = 30_000;

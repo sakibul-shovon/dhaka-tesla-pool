@@ -64,7 +64,7 @@ Priority order from the brief, applied to every trade-off:
 | **P0 — must ship** | Everything in §0.2. Transaction-safe pooling with row locks + DB CHECK backstop. Centralised state machines. Idempotent critical mutations. Ownership authorization. Status history. Concurrency tests C1–C16 (§10.6). Docker Compose from clean clone. ADRs, ERD, diagrams, assumptions, limitations, scalability doc. |
 | **P1 — should ship** | Driver "no-show" removal at arrival. GitHub Actions CI. `scripts/race-demo.ts` (last-seat race on demand for the video). Public deployment. One Playwright E2E happy path. |
 | **P2 — could ship** | Simulated **TeslaPay** wallet with ledger (Cash is always available). Automatic expiry of stale `REQUESTED` rides. |
-| **Won't (documented in LIMITATIONS)** | Real maps/routing/GPS, real payment gateway, WebSockets, Redis, queues, microservices, driver onboarding/KYC (real identity verification), ratings, push notifications. A minimal admin role for driver-account creation was added later — see §13.2. |
+| **Won't (documented in LIMITATIONS)** | Real maps/routing/GPS, real payment gateway, WebSockets, Redis, queues, microservices, driver onboarding/KYC (real identity verification), ratings, push notifications. A minimal admin role for driver-account creation was added later, then extended to read-only oversight plus account suspension — see §13.2 and ADR-019. |
 
 **Cut line:** if time runs short, cut P2, then Playwright, then deployment (fallback: reproducible Docker, as the PRD allows). **Never cut** concurrency tests, authorization tests, or the docs the PRD requires.
 
@@ -422,7 +422,7 @@ error code; the DB constraint is the backstop that holds even if the app is wron
 | I10 | A request is seated in ≤ 1 pool | DB unique | C2, C5 |
 | I11 | Only legal transitions | App state machines (single module) | matrix unit tests, C7, C8, C14 |
 | I12 | Terminal states (COMPLETED, CANCELLED) never change | App state machine + invariant checker | `lifecycle.int` |
-| I13 | History rows are never updated or deleted | **DB trigger** raising on UPDATE/DELETE | `db-constraints.int` |
+| I13 | History rows are never updated or deleted (ride, pool and account status history) | **DB trigger** raising on UPDATE/DELETE | `db-constraints.int`, `admin-users.int` |
 | I14 | Latest history `to_status` = current status | App (same tx) | invariant checker |
 | I15 | A driver only operates their own vehicle/pool | App ownership checks in every pool use case | `authorization.int` |
 | I16 | Membership pickup zone = pool pickup zone; all destinations pairwise ≤ 3.5 km | App (matching) | `matching.unit`, `pooling.int` |
@@ -856,6 +856,12 @@ details carry the id of the existing ride so the UI can navigate to it.
 | `POST /driver/pools/:id/cancel` | pool owner | opt | `{reason}` → pool | 409 INVALID_TRANSITION |
 | `GET /admin/drivers` | admin | – | → driver accounts + vehicle | 403 |
 | `POST /admin/drivers` | admin | – | `{name, email, password, vehicleName, capacity, zone?}` → 201 driver + vehicle | 400, 403, 409 EMAIL_TAKEN |
+| `GET /admin/stats` | admin | – | → overview counts + per-zone counts (online ACTIVE drivers, open requests, open pools) | 403 |
+| `GET /admin/users` | admin | – | `?role&status&q&cursor&limit` → users (never `password_hash`) | 400, 403 |
+| `GET /admin/users/:id` | admin | – | → profile + role-specific history, wallet, account status history | 403, 404 |
+| `POST /admin/users/:id/suspend` · `/reactivate` | admin | – | `{reason?}` → user (ADR-019) | 403 (admin target), 404, 409 INVALID_TRANSITION / ACTIVE_RIDE_EXISTS / DRIVER_HAS_ACTIVE_POOL |
+| `GET /admin/ride-requests` | admin | – | `?status&cursor&limit` → all ride requests | 400, 403 |
+| `GET /admin/ride-requests/:id` | admin | – | → ride + passenger + pool (driver, vehicle, members) + timeline | 403, 404 |
 | `GET /healthz` | public | – | liveness, no DB | – |
 | `GET /readyz` | public | – | DB `SELECT 1` (1 s timeout) | 503 |
 
@@ -908,6 +914,7 @@ details carry the id of the existing ride so the UI can navigate to it.
 | Injection | attacker | – | Parameterized queries only (Drizzle); zone codes are FK'd enums | `limits.int` (payload corpus) |
 | Information leakage | any | API8 misconfig | Error mapper hides stacks/SQL; `password_hash` never selected by default repository methods; pino redaction; `x-powered-by` off; helmet | `errors.int` |
 | Co-rider privacy | curious passenger | – | Passengers see `sharedWithCount` only — no names; drivers see first name + zones + seats only | `authorization.int` |
+| Admin action abuse / lock-out | admin, compromised admin | API5 BFLA | Admin routes behind role guard; admins can't be suspended from the panel (no self-lock-out, no admin-vs-admin); every suspension is an append-only `account_status_history` row with actor + reason (ADR-019) | `admin-users.int` |
 
 ### 13.2 Authorization matrix
 
@@ -921,9 +928,11 @@ details carry the id of the existing ride so the UI can navigate to it.
 | go online/offline, relevant requests, accept | 401 | 403 | 403 | ✅ | ✅ (own vehicle only) | 403 |
 | read / arrive / start / drop-off / no-show / cancel pool | 401 | 403 | 403 | ✅ | 404 | 403 |
 | create / list driver accounts | 401 | 403 | 403 | 403 | 403 | ✅ |
+| overview stats, user directory, any ride (incl. passenger names) | 401 | 403 | 403 | 403 | 403 | ✅ |
+| suspend / reactivate a passenger or driver | 401 | 403 | 403 | 403 | 403 | ✅ (not other admins) |
 | health | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-Admin is a fourth role, added after the initial MVP scope (A3 originally read "drivers are provisioned by seed, no admin panel" — reversed once the assessment needed a real way to onboard drivers besides hand-editing `db/seed`). Public `/auth/register` still only ever creates passengers; there is no self-serve path to DRIVER or ADMIN. Admin accounts are provisioned the same way the original DRIVER seed was: `db/seed/index.ts`.
+Admin is a fourth role, added after the initial MVP scope (A3 originally read "drivers are provisioned by seed, no admin panel" — reversed once the assessment needed a real way to onboard drivers besides hand-editing `db/seed`). Public `/auth/register` still only ever creates passengers; there is no self-serve path to DRIVER or ADMIN. Admin accounts are provisioned the same way the original DRIVER seed was: `db/seed/index.ts`. ADR-019 extends the role to read-only oversight plus account suspension — and records what it deliberately does not do (force-cancel rides, delete users, GPS, fare editing, wallet writes).
 
 ### 13.3 Auth and platform hardening details
 
@@ -1311,6 +1320,8 @@ Estimates assume one developer; they're for sequencing, not promises.
 | A24 | `EMAIL_TAKEN` is disclosed on registration | Usability; mitigated by rate limit | Switch to email-verification flow with generic response |
 | A25 | Timestamps stored UTC, displayed Asia/Dhaka | — | — |
 | A26 | Public deployment is preferred, not mandatory (PRD §6/§14); Compose is the guaranteed path | PRD wording | If evaluators require a live URL, the free stack in §18.3 already provides one |
+| A27 | Suspension is refused while the account has an active ride or pool; it never changes ride/pool state | Keeps the state machines and C1–C16 untouched (ADR-019) | Add an admin actor to the state machines, with its own concurrency tests |
+| A28 | A passenger request already in flight when a suspension commits still completes (≤ 1 ride) | Closing it means locking the user row inside ride creation — the hot booking path | Re-check `users.status` under a user-row lock in the write transaction |
 
 ---
 

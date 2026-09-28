@@ -18,7 +18,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-async function insertUser(role: "DRIVER" | "PASSENGER" = "PASSENGER"): Promise<string> {
+async function insertUser(role: "DRIVER" | "PASSENGER" | "ADMIN" = "PASSENGER"): Promise<string> {
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, 'x', $3) RETURNING id`,
     [`Test ${role}`, `${randomUUID()}@dhakateslapool.test`, role],
@@ -164,16 +164,16 @@ describe("pool_memberships constraints", () => {
     const rideRequestId = await insertRideRequest(passengerId, "MATCHED");
     const poolAId = await insertPool(vehicleId, driverId);
 
-    await pool.query(`INSERT INTO pool_memberships (pool_id, ride_request_id, seats) VALUES ($1, $2, 1)`, [
-      poolAId,
-      rideRequestId,
-    ]);
+    await pool.query(
+      `INSERT INTO pool_memberships (pool_id, ride_request_id, seats) VALUES ($1, $2, 1)`,
+      [poolAId, rideRequestId],
+    );
 
     await expect(
-      pool.query(`INSERT INTO pool_memberships (pool_id, ride_request_id, seats) VALUES ($1, $2, 1)`, [
-        poolAId,
-        rideRequestId,
-      ]),
+      pool.query(
+        `INSERT INTO pool_memberships (pool_id, ride_request_id, seats) VALUES ($1, $2, 1)`,
+        [poolAId, rideRequestId],
+      ),
     ).rejects.toThrow(/pool_memberships_ride_request_unique/);
   });
 });
@@ -182,7 +182,9 @@ describe("wallet_transactions constraints (plan §8.4)", () => {
   it("prevents a double debit for the same ride request", async () => {
     const passengerId = await insertUser();
     const rideRequestId = await insertRideRequest(passengerId, "COMPLETED");
-    await pool.query(`INSERT INTO wallets (user_id, balance_paisa) VALUES ($1, 100000)`, [passengerId]);
+    await pool.query(`INSERT INTO wallets (user_id, balance_paisa) VALUES ($1, 100000)`, [
+      passengerId,
+    ]);
 
     await pool.query(
       `INSERT INTO wallet_transactions (wallet_user_id, type, amount_paisa, ride_request_id) VALUES ($1, 'DEBIT', 6750, $2)`,
@@ -201,19 +203,23 @@ describe("wallet_transactions constraints (plan §8.4)", () => {
     const passengerId = await insertUser();
     await pool.query(`INSERT INTO wallets (user_id) VALUES ($1)`, [passengerId]);
 
-    await pool.query(`INSERT INTO wallet_transactions (wallet_user_id, type, amount_paisa) VALUES ($1, 'TOPUP', 50000)`, [
-      passengerId,
-    ]);
+    await pool.query(
+      `INSERT INTO wallet_transactions (wallet_user_id, type, amount_paisa) VALUES ($1, 'TOPUP', 50000)`,
+      [passengerId],
+    );
     await expect(
-      pool.query(`INSERT INTO wallet_transactions (wallet_user_id, type, amount_paisa) VALUES ($1, 'TOPUP', 30000)`, [
-        passengerId,
-      ]),
+      pool.query(
+        `INSERT INTO wallet_transactions (wallet_user_id, type, amount_paisa) VALUES ($1, 'TOPUP', 30000)`,
+        [passengerId],
+      ),
     ).resolves.not.toThrow();
   });
 
   it("rejects a negative wallet balance", async () => {
     const passengerId = await insertUser();
-    await pool.query(`INSERT INTO wallets (user_id, balance_paisa) VALUES ($1, 100)`, [passengerId]);
+    await pool.query(`INSERT INTO wallets (user_id, balance_paisa) VALUES ($1, 100)`, [
+      passengerId,
+    ]);
 
     await expect(
       pool.query(`UPDATE wallets SET balance_paisa = -1 WHERE user_id = $1`, [passengerId]),
@@ -247,9 +253,9 @@ describe("history immutability trigger", () => {
     await expect(
       pool.query(`UPDATE ride_status_history SET reason = 'edited' WHERE id = $1`, [historyId]),
     ).rejects.toThrow(/append-only/);
-    await expect(pool.query(`DELETE FROM ride_status_history WHERE id = $1`, [historyId])).rejects.toThrow(
-      /append-only/,
-    );
+    await expect(
+      pool.query(`DELETE FROM ride_status_history WHERE id = $1`, [historyId]),
+    ).rejects.toThrow(/append-only/);
   });
 
   it("rejects UPDATE and DELETE on pool_status_history", async () => {
@@ -265,8 +271,40 @@ describe("history immutability trigger", () => {
     await expect(
       pool.query(`UPDATE pool_status_history SET reason = 'edited' WHERE id = $1`, [historyId]),
     ).rejects.toThrow(/append-only/);
-    await expect(pool.query(`DELETE FROM pool_status_history WHERE id = $1`, [historyId])).rejects.toThrow(
-      /append-only/,
+    await expect(
+      pool.query(`DELETE FROM pool_status_history WHERE id = $1`, [historyId]),
+    ).rejects.toThrow(/append-only/);
+  });
+
+  it("rejects UPDATE and DELETE on account_status_history (ADR-019)", async () => {
+    const passengerId = await insertUser();
+    const adminId = await insertUser("ADMIN");
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO account_status_history (user_id, from_status, to_status, actor_user_id)
+       VALUES ($1, 'ACTIVE', 'SUSPENDED', $2) RETURNING id`,
+      [passengerId, adminId],
     );
+    const historyId = rows[0]!.id;
+
+    await expect(
+      pool.query(`UPDATE account_status_history SET reason = 'edited' WHERE id = $1`, [historyId]),
+    ).rejects.toThrow(/append-only/);
+    await expect(
+      pool.query(`DELETE FROM account_status_history WHERE id = $1`, [historyId]),
+    ).rejects.toThrow(/append-only/);
+  });
+});
+
+describe("account_status_history constraints", () => {
+  it("rejects a row that records no change", async () => {
+    const passengerId = await insertUser();
+    const adminId = await insertUser("ADMIN");
+    await expect(
+      pool.query(
+        `INSERT INTO account_status_history (user_id, from_status, to_status, actor_user_id)
+         VALUES ($1, 'ACTIVE', 'ACTIVE', $2)`,
+        [passengerId, adminId],
+      ),
+    ).rejects.toThrow(/account_status_history_changes/);
   });
 });

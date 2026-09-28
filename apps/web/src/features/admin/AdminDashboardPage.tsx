@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Users } from "lucide-react";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
@@ -69,7 +70,7 @@ export function AdminDashboardPage() {
 
   return (
     <PageContainer>
-      <h1 className="font-display text-2xl font-bold text-text">Admin</h1>
+      <h1 className="font-display text-2xl font-bold text-text">Drivers</h1>
 
       {/* Create-driver form beside the drivers table on wide screens (plan
           round 3 §3), stacked on mobile. */}
@@ -198,7 +199,11 @@ export function AdminDashboardPage() {
           {driversQuery.data && driversQuery.data.length > 0 && (
             <div className="mt-3 divide-y divide-border rounded-2xl border border-border bg-surface shadow-sm">
               {driversQuery.data.map((driver) => (
-                <div key={driver.id} className="flex items-center justify-between p-4 text-sm">
+                <Link
+                  key={driver.id}
+                  to={`/a/users/${driver.id}`}
+                  className="flex items-center justify-between p-4 text-sm transition-colors hover:bg-surface-raised"
+                >
                   <div>
                     <p className="font-medium text-text">{driver.name}</p>
                     <p className="text-text-muted">{driver.email}</p>
@@ -213,7 +218,7 @@ export function AdminDashboardPage() {
                         : "Offline"}
                     </Badge>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

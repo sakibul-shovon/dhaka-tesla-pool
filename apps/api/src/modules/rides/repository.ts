@@ -1,6 +1,11 @@
 import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client.js";
-import { RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX, rideRequests, rideStatusHistory } from "../../db/schema.js";
+import {
+  RIDE_REQUESTS_ACTIVE_PER_PASSENGER_INDEX,
+  rideRequests,
+  rideStatusHistory,
+  users,
+} from "../../db/schema.js";
 import { ACTIVE_RIDE_STATUSES, type RideStatus } from "../../domain/ride-state-machine.js";
 import { markLocked, type Locked } from "../../domain-writes/locked.js";
 import type { LockOrderGuard } from "../../lib/lock-order.js";
@@ -51,11 +56,19 @@ export function toRideRequestDTO(row: RideRequestRow) {
   };
 }
 
-export async function findActiveRideRequestId(tx: Tx, passengerId: string): Promise<string | undefined> {
+export async function findActiveRideRequestId(
+  tx: Tx,
+  passengerId: string,
+): Promise<string | undefined> {
   const [row] = await tx
     .select({ id: rideRequests.id })
     .from(rideRequests)
-    .where(and(eq(rideRequests.passengerId, passengerId), inArray(rideRequests.status, [...ACTIVE_RIDE_STATUSES])))
+    .where(
+      and(
+        eq(rideRequests.passengerId, passengerId),
+        inArray(rideRequests.status, [...ACTIVE_RIDE_STATUSES]),
+      ),
+    )
     .limit(1);
   return row?.id;
 }
@@ -71,7 +84,10 @@ export interface NewRideRequestInput {
   paymentMethod: "CASH" | "TESLAPAY";
 }
 
-export async function insertRideRequest(tx: Tx, input: NewRideRequestInput): Promise<RideRequestRow> {
+export async function insertRideRequest(
+  tx: Tx,
+  input: NewRideRequestInput,
+): Promise<RideRequestRow> {
   const [row] = await tx.insert(rideRequests).values(input).returning();
   return row!;
 }
@@ -80,7 +96,11 @@ export async function insertRideRequest(tx: Tx, input: NewRideRequestInput): Pro
 // transition — this *is* the row's first row. Writing the REQUESTED history
 // entry here, in the same transaction as the insert, is what keeps "a
 // history row for every transition" true from the very first one.
-export async function insertCreationHistory(tx: Tx, rideRequestId: string, actorUserId: string): Promise<void> {
+export async function insertCreationHistory(
+  tx: Tx,
+  rideRequestId: string,
+  actorUserId: string,
+): Promise<void> {
   await tx.insert(rideStatusHistory).values({
     rideRequestId,
     fromStatus: null,
@@ -111,7 +131,14 @@ export async function lockRideRequestForOwner(
   passengerId: string,
   guard: LockOrderGuard,
 ): Promise<
-  Locked<{ id: string; status: RideStatus; seats: number; pickupZone: string; dropoffZone: string }> | undefined
+  | Locked<{
+      id: string;
+      status: RideStatus;
+      seats: number;
+      pickupZone: string;
+      dropoffZone: string;
+    }>
+  | undefined
 > {
   guard.assert("requests");
   const [row] = await tx
@@ -149,7 +176,10 @@ export async function listRideRequestsForPassenger(
     conditions.push(
       or(
         lt(rideRequests.createdAt, params.cursor.createdAt),
-        and(eq(rideRequests.createdAt, params.cursor.createdAt), lt(rideRequests.id, params.cursor.id))!,
+        and(
+          eq(rideRequests.createdAt, params.cursor.createdAt),
+          lt(rideRequests.id, params.cursor.id),
+        )!,
       )!,
     );
   }
@@ -171,7 +201,10 @@ export interface RideStatusHistoryRow {
   createdAt: Date;
 }
 
-export async function listRideStatusHistory(db: Db, rideRequestId: string): Promise<RideStatusHistoryRow[]> {
+export async function listRideStatusHistory(
+  db: Db,
+  rideRequestId: string,
+): Promise<RideStatusHistoryRow[]> {
   return db
     .select({
       id: rideStatusHistory.id,
@@ -194,5 +227,61 @@ export function toHistoryDTO(row: RideStatusHistoryRow) {
     actorUserId: row.actorUserId,
     reason: row.reason,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+// Everything below is admin-only (ADR-019): the passenger's own endpoints
+// never expose another user's name (co-riders see a count, not a name --
+// A18), but an admin genuinely needs to know whose ride this is.
+export interface ListAllRideRequestsParams {
+  status?: RideStatus;
+  cursor?: { createdAt: Date; id: string };
+  limit: number;
+}
+
+export async function listAllRideRequests(db: Db, params: ListAllRideRequestsParams) {
+  const conditions = [];
+  if (params.status) {
+    conditions.push(eq(rideRequests.status, params.status));
+  }
+  if (params.cursor) {
+    conditions.push(
+      or(
+        lt(rideRequests.createdAt, params.cursor.createdAt),
+        and(
+          eq(rideRequests.createdAt, params.cursor.createdAt),
+          lt(rideRequests.id, params.cursor.id),
+        )!,
+      )!,
+    );
+  }
+
+  return db
+    .select({ ...RIDE_REQUEST_COLUMNS, passengerName: users.name, passengerEmail: users.email })
+    .from(rideRequests)
+    .innerJoin(users, eq(users.id, rideRequests.passengerId))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(rideRequests.createdAt), desc(rideRequests.id))
+    .limit(params.limit + 1);
+}
+
+export async function findRideRequestForAdmin(db: Db, id: string) {
+  const [row] = await db
+    .select({ ...RIDE_REQUEST_COLUMNS, passengerName: users.name, passengerEmail: users.email })
+    .from(rideRequests)
+    .innerJoin(users, eq(users.id, rideRequests.passengerId))
+    .where(eq(rideRequests.id, id))
+    .limit(1);
+  return row;
+}
+
+export function toAdminRideRequestDTO(
+  row: RideRequestRow & { passengerName: string; passengerEmail: string },
+) {
+  return {
+    ...toRideRequestDTO(row),
+    passengerId: row.passengerId,
+    passengerName: row.passengerName,
+    passengerEmail: row.passengerEmail,
   };
 }

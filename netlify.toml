@@ -6,10 +6,11 @@
   command = "npm run build --workspace=packages/shared && npm run build --workspace=apps/web"
   publish = "apps/web/dist"
 
-# Replace with the actual Render service URL once it exists.
+# The exact hostname Render assigned once the service existed — "dhaka-tesla-pool-api"
+# alone was already taken, so Render appended a suffix.
 [[redirects]]
   from = "/api/*"
-  to = "https://dhaka-tesla-pool-api.onrender.com/api/:splat"
+  to = "https://dhaka-tesla-pool-api-luvr.onrender.com/api/:splat"
   status = 200
   force = true
 

@@ -15,12 +15,13 @@ services:
     region: singapore
     plan: free
     healthCheckPath: /api/v1/healthz
-    # Render doesn't run dockerCommand through a shell — it execs the string
-    # split on whitespace, so a bare `&&` chain silently stops after the
-    # first command (migrate.js exits, the container's only process is
-    # gone, Render reports "exited early"). Wrapping in `sh -c` restores
-    # shell semantics for the chain.
-    dockerCommand: "sh -c 'node apps/api/dist/db/migrate.js && node apps/api/dist/db/seed/index.js && node apps/api/dist/server.js'"
+    # A bare `&&` chain here doesn't survive Render's own dockerCommand
+    # parsing (confirmed live: both an unwrapped chain and a `sh -c '...'`
+    # wrapper failed — the latter with "sh: 1: <the whole chain>: not
+    # found", meaning quoting inside this field isn't reliably preserved
+    # either way). A single unambiguous script path sidesteps all of it —
+    # see apps/api/docker-start.sh for the migrate -> seed -> server steps.
+    dockerCommand: "apps/api/docker-start.sh"
     envVars:
       - key: NODE_ENV
         value: production

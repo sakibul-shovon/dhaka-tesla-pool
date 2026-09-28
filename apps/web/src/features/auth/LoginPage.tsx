@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Car, ShieldCheck, User as UserIcon } from "lucide-react";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
 import { useRetryCountdown } from "../../lib/useRetryCountdown.js";
 import { ErrorBanner } from "../../components/ui/ErrorBanner.js";
@@ -11,8 +12,51 @@ import { useToast } from "../../components/ui/Toast.js";
 import { AuthSplitLayout } from "./AuthSplitLayout.js";
 import type { User } from "../../lib/types.js";
 
+// Only the email, never the password — sessionStorage isn't encrypted and
+// a password has no business surviving a tab reload. This exists because
+// a backgrounded tab can lose all in-memory state to the browser's own
+// memory-saving discard-and-reload behavior; it's a draft, not real
+// persistence, so it's cleared the moment login actually succeeds.
+const EMAIL_DRAFT_KEY = "dtp-login-email-draft";
+
+function readEmailDraft(): string {
+  try {
+    return sessionStorage.getItem(EMAIL_DRAFT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeEmailDraft(value: string): void {
+  try {
+    sessionStorage.setItem(EMAIL_DRAFT_KEY, value);
+  } catch {
+    // Best-effort only — the field still works for this page view.
+  }
+}
+
+function clearEmailDraft(): void {
+  try {
+    sessionStorage.removeItem(EMAIL_DRAFT_KEY);
+  } catch {
+    // Nothing to clean up if storage was never writable.
+  }
+}
+
+// The demo cast's shared password (.env.example's DEMO_PASSWORD default,
+// documented in the README as the demo credential for evaluators) — not a
+// secret, the whole point of a demo account. Fills the fields; it does not
+// submit, so an evaluator sees which account they're about to use before
+// committing to it.
+const DEMO_PASSWORD = "dhaka-tesla-demo";
+const DEMO_ACCOUNTS = [
+  { role: "Passenger", name: "Nusrat", email: "nusrat@dhakateslapool.test", Icon: UserIcon },
+  { role: "Driver", name: "Jashim", email: "jashim@dhakateslapool.test", Icon: Car },
+  { role: "Admin", name: "Admin", email: "admin@dhakateslapool.test", Icon: ShieldCheck },
+] as const;
+
 export function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(readEmailDraft);
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,6 +76,7 @@ export function LoginPage() {
   const login = useMutation({
     mutationFn: () => api.post<User>("/auth/login", { email, password }),
     onSuccess: (user) => {
+      clearEmailDraft();
       queryClient.setQueryData(["auth", "me"], user);
       navigate("/p", { replace: true });
     },
@@ -44,12 +89,38 @@ export function LoginPage() {
     login.mutate();
   }
 
+  function fillDemoAccount(account: (typeof DEMO_ACCOUNTS)[number]) {
+    setEmail(account.email);
+    writeEmailDraft(account.email);
+    setPassword(DEMO_PASSWORD);
+  }
+
   return (
     <AuthSplitLayout>
       <h1 className="font-display text-2xl font-bold text-text">Welcome back</h1>
       <p className="mt-1 text-sm text-text-muted">Sign in to request or manage your ride.</p>
 
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+      <div className="mt-5 rounded-xl border border-border-strong bg-surface-raised p-3">
+        <p className="text-xs font-medium text-text-muted">
+          Evaluating this project? Fill a demo account, then sign in:
+        </p>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {DEMO_ACCOUNTS.map((account) => (
+            <Button
+              key={account.email}
+              type="button"
+              variant="secondary"
+              icon={<account.Icon size={14} strokeWidth={2.25} />}
+              onClick={() => fillDemoAccount(account)}
+              className="px-2 text-xs"
+            >
+              {account.role}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-1.5">
           <label htmlFor="email" className="block text-sm font-medium text-text">
             Email
@@ -60,7 +131,10 @@ export function LoginPage() {
             required
             autoComplete="email"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              writeEmailDraft(event.target.value);
+            }}
           />
         </div>
         <div className="space-y-1.5">

@@ -16,15 +16,24 @@ import tailwindcss from "@tailwindcss/vite";
 // under its exact expected name after the build restores the sibling
 // maplibre-gl itself relies on; dev is unaffected (optimizeDeps.exclude
 // below already keeps maplibre-gl's real files intact there).
+//
+// maplibre-gl-worker.mjs is itself a real ES module with its own static
+// import — `import {...} from "./maplibre-gl-shared.mjs"` — so that file
+// needs the same treatment, one level deeper, or the worker script loads
+// fine but fails on its own first line for the identical reason.
+const MAPLIBRE_RUNTIME_FILES = ["maplibre-gl-worker.mjs", "maplibre-gl-shared.mjs"];
+
 function copyMaplibreWorker(): Plugin {
   return {
     name: "copy-maplibre-worker",
     apply: "build",
     closeBundle() {
-      const workerPath = fileURLToPath(import.meta.resolve("maplibre-gl/dist/maplibre-gl-worker.mjs"));
       const outDir = join(dirname(fileURLToPath(import.meta.url)), "dist/assets");
       mkdirSync(outDir, { recursive: true });
-      copyFileSync(workerPath, join(outDir, "maplibre-gl-worker.mjs"));
+      for (const file of MAPLIBRE_RUNTIME_FILES) {
+        const src = fileURLToPath(import.meta.resolve(`maplibre-gl/dist/${file}`));
+        copyFileSync(src, join(outDir, file));
+      }
     },
   };
 }

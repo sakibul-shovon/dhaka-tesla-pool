@@ -11,8 +11,39 @@ import { useToast } from "../../components/ui/Toast.js";
 import { AuthSplitLayout } from "./AuthSplitLayout.js";
 import type { User } from "../../lib/types.js";
 
+// Only the email, never the password — sessionStorage isn't encrypted and
+// a password has no business surviving a tab reload. This exists because
+// a backgrounded tab can lose all in-memory state to the browser's own
+// memory-saving discard-and-reload behavior; it's a draft, not real
+// persistence, so it's cleared the moment login actually succeeds.
+const EMAIL_DRAFT_KEY = "dtp-login-email-draft";
+
+function readEmailDraft(): string {
+  try {
+    return sessionStorage.getItem(EMAIL_DRAFT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeEmailDraft(value: string): void {
+  try {
+    sessionStorage.setItem(EMAIL_DRAFT_KEY, value);
+  } catch {
+    // Best-effort only — the field still works for this page view.
+  }
+}
+
+function clearEmailDraft(): void {
+  try {
+    sessionStorage.removeItem(EMAIL_DRAFT_KEY);
+  } catch {
+    // Nothing to clean up if storage was never writable.
+  }
+}
+
 export function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(readEmailDraft);
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,6 +63,7 @@ export function LoginPage() {
   const login = useMutation({
     mutationFn: () => api.post<User>("/auth/login", { email, password }),
     onSuccess: (user) => {
+      clearEmailDraft();
       queryClient.setQueryData(["auth", "me"], user);
       navigate("/p", { replace: true });
     },
@@ -60,7 +92,10 @@ export function LoginPage() {
             required
             autoComplete="email"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              writeEmailDraft(event.target.value);
+            }}
           />
         </div>
         <div className="space-y-1.5">

@@ -1,0 +1,42 @@
+# Render Blueprint (plan §18.3) — exactly one web service. Migrations run as
+# part of the start command, not a separate service or pre-deploy hook,
+# since the free tier's 750 instance-hours/month only covers one always-on
+# service.
+#
+# DATABASE_URL and WEB_ORIGIN are marked sync: false — fill them in from the
+# Render dashboard once Neon and Netlify exist (this file can't know either
+# URL in advance, and DATABASE_URL is a secret regardless).
+services:
+  - type: web
+    name: dhaka-tesla-pool-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    region: singapore
+    plan: free
+    healthCheckPath: /api/v1/healthz
+    dockerCommand: "node apps/api/dist/db/migrate.js && node apps/api/dist/db/seed/index.js && node apps/api/dist/server.js"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_POOL_MAX
+        value: "5"
+      - key: SESSION_TTL_HOURS
+        value: "168"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: WEB_ORIGIN
+        sync: false
+      # Netlify proxy -> Render load balancer -> this service (plan §13.3).
+      - key: TRUST_PROXY
+        value: "2"
+      - key: ALLOW_DEMO_SEED
+        value: "true"
+      - key: SEED_DEMO
+        value: "true"
+      - key: DEMO_PASSWORD
+        sync: false

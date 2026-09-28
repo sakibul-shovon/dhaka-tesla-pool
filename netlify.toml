@@ -1,0 +1,34 @@
+# Netlify static site (plan §18.3). Build from the repo root so the
+# workspace's shared package builds before the web app (matching what the
+# root `npm run build` script already does — Netlify runs `npm install` at
+# the repo root automatically before this command).
+[build]
+  command = "npm run build --workspace=packages/shared && npm run build --workspace=apps/web"
+  publish = "apps/web/dist"
+
+# Replace with the actual Render service URL once it exists.
+[[redirects]]
+  from = "/api/*"
+  to = "https://dhaka-tesla-pool-api.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+# SPA fallback — client-side routes (e.g. /p/rides/:id) aren't real files.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Vite content-hashes every built asset, so those can be cached forever;
+# index.html must never be cached or a redeploy strands returning visitors
+# on stale asset references (mirrors apps/web/nginx.conf's same rule for the
+# Docker Compose path).
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

@@ -5,6 +5,7 @@ import { HttpError } from "../../http/error-mapper.js";
 import { sendData } from "../../http/response.js";
 import { authenticate } from "../../http/middleware/authenticate.js";
 import { loginPerIpEmailLimiter, loginPerIpLimiter, registerPerIpLimiter } from "../../http/middleware/rate-limit.js";
+import { logBusinessEvent } from "../../lib/business-events.js";
 import { hashPassword, verifyPassword } from "./password-service.js";
 import { createPassengerUser, findUserByEmail, type UserRow } from "./repository.js";
 import { loginSchema, registerSchema } from "./schemas.js";
@@ -67,6 +68,7 @@ export function authRouter({ db, sessionTtlHours, cookieSecure }: AuthRouterDeps
       const user = await findUserByEmail(db, parsed.data.email);
       const passwordOk = await verifyPassword(user?.passwordHash, parsed.data.password);
       if (!user || !passwordOk || user.status !== "ACTIVE") {
+        logBusinessEvent(req.log, "auth.login_failed", { email: parsed.data.email });
         next(new HttpError(401, ERROR_CODES.INVALID_CREDENTIALS, "Email or password is incorrect."));
         return;
       }

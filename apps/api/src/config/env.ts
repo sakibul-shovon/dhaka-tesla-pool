@@ -4,6 +4,10 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  // Kept small on purpose (plan §18.3): Neon's free tier is metered by
+  // CU-hours, and every idle connection counts against that regardless of
+  // whether it's doing anything.
+  DB_POOL_MAX: z.coerce.number().int().positive().default(5),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   // Auth (plan §13.3): session cookie lifetime, whether it requires HTTPS,
   // the dev-only Origin allow-list, and how many reverse-proxy hops to

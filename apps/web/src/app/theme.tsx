@@ -18,9 +18,12 @@ function readStoredPreference(): ThemePreference {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark" || stored === "system") return stored;
   } catch {
-    // localStorage can throw (private browsing, blocked storage) — system is a safe default.
+    // localStorage can throw (private browsing, blocked storage) — light is still the default.
   }
-  return "system";
+  // Light is the deliberate default (ADR-017), not the OS preference — a
+  // first-time visitor on a dark-mode OS should still see the light theme
+  // this product was designed around, and switch to dark explicitly.
+  return "light";
 }
 
 interface ThemeContextValue {

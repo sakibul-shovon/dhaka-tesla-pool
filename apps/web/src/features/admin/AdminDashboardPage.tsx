@@ -8,6 +8,7 @@ import { PageContainer } from "../../components/layout/PageContainer.js";
 import { ErrorBanner } from "../../components/ui/ErrorBanner.js";
 import { Card } from "../../components/ui/Card.js";
 import { Input } from "../../components/ui/Input.js";
+import { PasswordInput } from "../../components/ui/PasswordInput.js";
 import { Select } from "../../components/ui/Select.js";
 import { Button } from "../../components/ui/Button.js";
 import { Badge } from "../../components/ui/Badge.js";
@@ -107,9 +108,8 @@ export function AdminDashboardPage() {
                   <label htmlFor="driver-password" className="block text-sm font-medium text-text">
                     Temporary password
                   </label>
-                  <Input
+                  <PasswordInput
                     id="driver-password"
-                    type="password"
                     required
                     minLength={8}
                     value={password}

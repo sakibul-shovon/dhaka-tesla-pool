@@ -6,8 +6,8 @@ A ride-pooling MVP: passengers (Nusrat, Rafiq, Shirin) request rides, a driver (
 requests into his three-seat Tesla (Bullet), every passenger pays an individual fare, and seat capacity
 can never be exceeded — even when two people grab the last seat at the same instant.
 
-**Demo video:** _[link — recorded after deployment, see §Deployment below]_
-**Live deployment:** _[link — see §Deployment below]_
+**Demo video:** _[link — recording pending]_
+**Live deployment:** [https://dhaka-tesla-pool.netlify.app](https://dhaka-tesla-pool.netlify.app)
 
 ## Table of contents
 
@@ -454,11 +454,17 @@ Design and free-tier provider decisions are in
 [`render.yaml`](render.yaml) / [`netlify.toml`](netlify.toml): Render (API, Docker runtime, Singapore) +
 Neon (Postgres, same region) + Netlify (static SPA, proxying `/api/*` to Render).
 
-**Status:** _not yet deployed — [`render.yaml`](render.yaml) and [`netlify.toml`](netlify.toml) are ready
-to connect to a Render account and a Netlify account; `DATABASE_URL`, `WEB_ORIGIN` and `DEMO_PASSWORD`
-are intentionally left blank in `render.yaml` (`sync: false`) to be filled in from each platform's
-dashboard once both services exist. Per the PRD, a public deployment is preferred, not mandatory — the
-Docker Compose path above is the guaranteed, fully-reproducible alternative._
+**Status:** deployed and live.
+
+- Frontend: [https://dhaka-tesla-pool.netlify.app](https://dhaka-tesla-pool.netlify.app)
+- API: [https://dhaka-tesla-pool-api-luvr.onrender.com](https://dhaka-tesla-pool-api-luvr.onrender.com)
+  (`-luvr` because the plain `dhaka-tesla-pool-api` hostname was already taken on Render)
+- Database: Neon (Postgres 17, `ap-southeast-1`)
+
+The Render free web service spins down after ~15 minutes idle and takes 30-50s to wake on the next
+request — expected, and the frontend's cold-start handling (`isColdStart`, ADR-009) already covers it.
+An external health-check ping keeps it warm during the evaluation window regardless. See
+[Demo credentials](#demo-credentials) to log in on the live deployment.
 
 ## Key decisions and trade-offs
 

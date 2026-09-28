@@ -10,10 +10,13 @@
       // wrong theme — app/theme.tsx's ThemeProvider takes over from here.
       (function () {
         try {
+          // Light is the deliberate default (ADR-017) regardless of the
+          // visitor's OS setting — only an explicitly stored "dark" (or
+          // "system" while the OS itself prefers dark) turns this on.
           var pref = localStorage.getItem("dtp-theme");
           var dark =
             pref === "dark" ||
-            (pref !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+            (pref === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
           if (dark) document.documentElement.classList.add("dark");
         } catch (e) {}
       })();

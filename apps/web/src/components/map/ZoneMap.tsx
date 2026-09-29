@@ -1,9 +1,24 @@
 import { useEffect, useMemo, useRef, type ComponentType } from "react";
 import { Map as MapLibreMap, Marker, Source, Layer, type MapRef } from "@vis.gl/react-maplibre";
+import { setWorkerUrl } from "maplibre-gl";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Car, Flag, MapPin } from "lucide-react";
 import { useTheme } from "../../app/theme.js";
 import { DHAKA_CENTER, ZONE_DISPLAY_COORDS } from "./zoneCoords.js";
+
+// Left alone, maplibre-gl looks for its tile-parsing worker as a sibling
+// file literally named "maplibre-gl-worker.mjs" next to whatever file its
+// own code was bundled into. Copying that file into the build (the previous
+// approach) left two problems: the name carries no content hash, so a
+// browser that once cached a bad response for it — Netlify served its SPA
+// fallback HTML there, under /assets/*'s year-long immutable cache — kept the
+// map blank across every later redeploy; and nginx's mime.types has no .mjs
+// entry, so the Docker Compose build served it as application/octet-stream,
+// which browsers refuse to run as a module. Letting Vite bundle the worker
+// instead yields a content-hashed .js file that every static host serves as
+// JavaScript. Module scope, so it runs before any map is created.
+setWorkerUrl(maplibreWorkerUrl);
 
 // Free vector tiles, no API key / account / quota (plan §5) — matches the
 // PRD's free-tier-only rule with zero billing risk. Positron over the

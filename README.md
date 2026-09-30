@@ -6,8 +6,12 @@ A ride-pooling MVP: passengers (Nusrat, Rafiq, Shirin) request rides, a driver (
 requests into his three-seat Tesla (Bullet), every passenger pays an individual fare, and seat capacity
 can never be exceeded — even when two people grab the last seat at the same instant.
 
-**Demo video:** _[link — recording pending]_
+**Demo video (6 min):** [▶ Watch on YouTube](https://youtu.be/Kys3aAzrT0I)
 **Live deployment:** [https://dhaka-tesla-pool.netlify.app](https://dhaka-tesla-pool.netlify.app)
+
+**My role:** I built this alone, end to end: the product decisions and assumptions, architecture,
+database, API, web app, tests, Docker setup and the free-tier deployment. I used AI tools throughout and
+say exactly how in [AI usage](#ai-usage).
 
 ## Table of contents
 
@@ -124,7 +128,18 @@ local `docker compose up` run. Times are the capture machine's local time.
 | Containers | Docker multi-stage builds, Docker Compose | Non-root runtime user, healthcheck-gated startup order |
 
 Every non-obvious choice above has a full ADR in [`docs/decisions/`](docs/decisions/) — context, the
-alternatives actually considered, and the concrete signal that would make us switch later.
+alternatives actually considered, and the concrete signal that would make us switch later. The smaller
+choices below don't need a full ADR, so each gets the same four answers here: what I picked, what else I
+could have, why it fits a ride-pooling MVP, and what would make me switch.
+
+| Choice | Picked | Realistic alternatives | Why it fits here | I'd switch when |
+|---|---|---|---|---|
+| Validation | Zod, `.strict()` schemas, API side only | Joi, class-validator | Unknown fields are rejected outright, which closes mass-assignment holes, and the schema types the handler's input | The web app needs the same rules for instant form feedback: move the schemas into `packages/shared` |
+| Password hashing | Argon2id (`@node-rs/argon2`) | bcrypt | Memory-hard, OWASP's first choice, and it ships prebuilt binaries so the Docker build needs no native toolchain | A host without prebuilt binaries makes the install fragile: bcrypt is the fallback |
+| Logging | pino + pino-http | winston | Structured JSON with request ids and built-in redaction, cheap enough for a small free-tier process | A log backend is added: the JSON output ships unchanged, so no code change |
+| Rate limiting | `express-rate-limit`, in-memory, auth endpoints only | Redis-backed store, limits at the edge | Correct for one API instance, and the honest limitation is documented ([Known limitations](#known-limitations)) | More than one API instance runs: a shared Redis store or edge limits |
+| Styling | Tailwind CSS v4 with design tokens | CSS Modules, a component library | Consistent spacing and colour from one token set, no runtime cost, quick for one person to keep coherent across ~16 screens | A design system is shared across several apps: extract components into a package |
+| Hosting | Render (API, Docker) + Neon (Postgres) + Netlify (static site, `/api/*` proxied) | Render Postgres, Koyeb, Fly.io | All three are free with no card. Neon instead of Render Postgres because Render's free database expires after 30 days. The proxy keeps the session cookie first-party | Real users arrive: a paid always-on API instance, since the free tier sleeps. Fallback stays reproducible `docker compose up` |
 
 ## Architecture
 
@@ -329,7 +344,7 @@ dhaka-tesla-pool/
 ### Option A — Docker Compose (recommended, matches the deployed topology)
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/sakibul-shovon/dhaka-tesla-pool.git
 cd dhaka-tesla-pool
 cp .env.example .env
 docker compose up --build
@@ -548,12 +563,15 @@ In rough priority order, if this moved past MVP:
 
 ## AI usage
 
-This project was built with Claude (Anthropic) across two phases: an initial planning phase that produced
-[`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) from the PRD, then an implementation phase
-(Claude Code) that built the plan session by session, one feature branch per session, each opened as a
-pull request and reviewed before merging. `docs/AI_USAGE_LOG.md` is a running log of specific suggestions
-across the project and how they were judged, in the author's own words — kept separate from this section
-because that judgment call is the point of the exercise, not something to summarize away.
+I used AI on purpose and I'm not hiding it. **Tools:** Claude in the claude.ai chat to read the PRD and
+draft [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md), and Claude Code in VS Code to implement
+that plan one feature branch at a time. It also wrote a lot of the test and documentation drafts, and it
+found bugs I then decided how to fix, such as a failed load blanking a whole page (#29). Every change came
+to me as a pull request; CI ran the full test suite on it, and I reviewed and merged each one myself. The decisions that shaped
+the product were mine, not the tool's: the light theme, the real basemap without fake GPS, and keeping the
+admin panel to a single write action. I can explain, debug or change any part of the code.
+[`docs/AI_USAGE_LOG.md`](docs/AI_USAGE_LOG.md) is a running log of specific suggestions and how I judged
+them, kept separate from this section because that judgement is the point of the exercise.
 
 A few concrete, specific instances from the implementation phase (each pull request's own description has
 more — every PR includes an "AI usage on this branch" section with what was accepted as proposed,

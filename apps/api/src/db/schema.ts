@@ -19,7 +19,7 @@ import {
 // Enums and tables mirror docs/IMPLEMENTATION_PLAN.md §5.2 (ERD) and §6
 // (invariants) exactly — every CHECK/index/FK here is cited there.
 
-export const userRoleEnum = pgEnum("user_role", ["PASSENGER", "DRIVER"]);
+export const userRoleEnum = pgEnum("user_role", ["PASSENGER", "DRIVER", "ADMIN"]);
 export const accountStatusEnum = pgEnum("account_status", ["ACTIVE", "SUSPENDED"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["CASH", "TESLAPAY"]);
 export const rideStatusEnum = pgEnum("ride_status", [
@@ -144,6 +144,9 @@ export const rideRequests = pgTable(
     index("ride_requests_pickup_open")
       .on(table.pickupZone, table.createdAt)
       .where(sql`${table.status} = 'REQUESTED'`),
+    // The admin ride browser (ADR-019) pages across every passenger, newest
+    // first — the passenger-scoped history index can't serve that.
+    index("ride_requests_created").on(table.createdAt.desc(), table.id.desc()),
     check("ride_requests_seats_range", sql`${table.seats} BETWEEN 1 AND 6`),
     check("ride_requests_distance_positive", sql`${table.distanceDkm} > 0`),
     check("ride_requests_solo_fare_nonneg", sql`${table.soloFarePaisa} >= 0`),
@@ -240,11 +243,7 @@ export const rideStatusHistory = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("ride_status_history_timeline").on(
-      table.rideRequestId,
-      table.createdAt,
-      table.id,
-    ),
+    index("ride_status_history_timeline").on(table.rideRequestId, table.createdAt, table.id),
   ],
 );
 
@@ -263,6 +262,31 @@ export const poolStatusHistory = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("pool_status_history_timeline").on(table.poolId, table.createdAt, table.id)],
+);
+
+// Same append-only shape and trigger as the ride/pool histories (I13), for
+// the one admin write action (ADR-019). Unlike those, there is no creation
+// row — an account's first status is its column default — so from_status and
+// actor are always known, and a row must record an actual change.
+export const accountStatusHistory = pgTable(
+  "account_status_history",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    fromStatus: accountStatusEnum("from_status").notNull(),
+    toStatus: accountStatusEnum("to_status").notNull(),
+    actorUserId: uuid("actor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    reason: text("reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("account_status_history_timeline").on(table.userId, table.createdAt, table.id),
+    check("account_status_history_changes", sql`${table.fromStatus} <> ${table.toStatus}`),
+  ],
 );
 
 export const idempotencyKeys = pgTable(
@@ -300,7 +324,8 @@ export const wallets = pgTable(
   (table) => [check("wallets_balance_nonneg", sql`${table.balancePaisa} >= 0`)],
 );
 
-export const WALLET_TRANSACTIONS_RIDE_REQUEST_TYPE_UNIQUE = "wallet_transactions_ride_request_type_unique";
+export const WALLET_TRANSACTIONS_RIDE_REQUEST_TYPE_UNIQUE =
+  "wallet_transactions_ride_request_type_unique";
 
 // UNIQUE(ride_request_id, type) is the double-debit backstop (plan §8.4):
 // every DEBIT row carries the ride it paid for, so a second DEBIT attempt
@@ -316,7 +341,9 @@ export const walletTransactions = pgTable(
       .references(() => wallets.userId, { onDelete: "restrict" }),
     type: walletTransactionTypeEnum("type").notNull(),
     amountPaisa: integer("amount_paisa").notNull(),
-    rideRequestId: uuid("ride_request_id").references(() => rideRequests.id, { onDelete: "restrict" }),
+    rideRequestId: uuid("ride_request_id").references(() => rideRequests.id, {
+      onDelete: "restrict",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

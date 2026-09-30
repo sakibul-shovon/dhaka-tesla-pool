@@ -6,6 +6,39 @@ honest fix looks like for each. Every "why not now" answer is the same shape: th
 handles the load this project is actually built for, and building the scaled version first would mean
 guessing at a shape the real bottleneck hasn't revealed yet.
 
+## The shape this reasoning points toward
+
+None of this is built — it's where the fixes below, taken together, would land. The numbered items below
+walk through why each box exists and why it isn't there today.
+
+```mermaid
+flowchart TB
+    Client["Passenger / driver apps"]
+    CDN["CDN + WAF<br/>(static assets, DDoS filtering,<br/>edge rate limiting)"]
+    LB["Load balancer"]
+    subgraph API["API instances (N, stateless)"]
+        A1["API"]
+        A2["API"]
+        A3["API"]
+    end
+    Cache[("Redis<br/>(session cache, rate-limit counters)")]
+    Push["SSE/WebSocket gateway<br/>(replaces polling, #1)"]
+    Bouncer["PgBouncer<br/>(transaction pooling, #3)"]
+    Primary[("Postgres primary<br/>(writes, seat-reservation locks)")]
+    Replicas[("Read replicas<br/>(history, offers, admin reads)")]
+    Match["Matching service<br/>(geospatial index, #2)"]
+    Bus["Event bus<br/>(outbox -> queue)"]
+
+    Client -->|HTTPS| CDN --> LB --> API
+    API <--> Cache
+    API --> Push
+    API --> Bouncer --> Primary
+    Bouncer --> Replicas
+    Primary -.->|replication| Replicas
+    API --> Bus --> Match
+    Match --> Bouncer
+```
+
 ## What breaks first, roughly in order
 
 ### 1. Polling load on "active ride" and "driver requests" reads
@@ -101,6 +134,61 @@ prevents — a pool stops accepting joins the moment it's full).
 of any one pool's contention, and the number of pools scales with drivers, which scales with cities. The
 practical way this stays healthy at scale is geographic partitioning (zone/city-scoped matching, #2
 above) — it's the same fix, not a separate one.
+
+## Security at scale
+
+The current posture is already real, not placeholder: Argon2id + timing-safe login, sessions revocable on
+the next request (ADR-004), `.strict()` Zod validation against mass-assignment everywhere, helmet's
+baseline headers, CSRF defended by `SameSite=Lax` cookies plus an `Origin` allow-list, and auth-endpoint
+rate limiting. What's honestly missing is everything that only matters once the traffic is real internet
+traffic, not an evaluator's browser:
+
+- **DDoS / bot traffic at the edge.** Today the API is the first thing that sees a request. At scale a
+  CDN/WAF (Cloudflare, or Render's/Netlify's own edge) needs to absorb volumetric attacks and filter
+  obvious bot traffic before it reaches an API instance at all — the app-level rate limiters (#5 above)
+  are the second line of defense, not the first.
+- **CSRF token, not just `SameSite`.** `SameSite=Lax` plus the `Origin` check (ADR-004's own trade-off
+  note, also in `docs/LIMITATIONS.md`) is a reasonable MVP default, but it depends on the cookie surviving
+  every proxy in the path unmodified. A multi-hop production topology (CDN → load balancer → API) is
+  exactly the kind of setup that occasionally breaks `SameSite` in practice; the documented fallback is a
+  real double-submit CSRF token.
+- **Secrets in a real secrets manager, with rotation.** Right now, secrets are platform environment
+  variables (Render/Netlify dashboards) — fine for one deployment, but they don't rotate themselves and
+  the dashboard itself is a single point of trust. At scale this moves to a secrets manager (AWS Secrets
+  Manager, Vault) with rotation on a schedule and on suspected compromise.
+- **Automated dependency scanning as a required CI check.** Today this is `npm audit` run by hand. At
+  scale — and with more contributors — this becomes Dependabot/Snyk gating merges, the same way
+  `git-policy` and `ci` already gate them (`docs/GIT_WORKFLOW.md`).
+- **Anomaly detection on auth**, e.g. an "impossible travel" or device-change signal on login, beyond the
+  current brute-force-only rate limiting. Reasoning only — building this before there's real attack
+  traffic to tune it against would just be guessing at thresholds.
+
+**Why not now:** every item above is a control that only pays for itself once there's real adversarial
+traffic to defend against; before that, each one is either free-tier-unavailable (a managed WAF) or pure
+operational overhead with nothing to protect yet.
+
+## Retry and failure strategy at scale
+
+Idempotency keys (ADR-010) already make a *client's* retry safe at any scale — a repeated
+`POST /ride-requests` with the same key replays the original response instead of creating a second ride,
+regardless of how many instances are running. The frontend's polling backoff (ADR-009,
+`apps/web/src/lib/polling.ts`) is already the retry strategy for reads: exponential, capped, and aware of
+a cold-started free-tier backend. Two things genuinely change at scale:
+
+- **Failing fast becomes failing fast *and* routing around the failure.** `runInTransaction`'s
+  `lock_timeout`/`statement_timeout` already turn a stuck transaction into a clean `503 SERVICE_BUSY`
+  instead of a pile of waiting requests (`lib/transaction.ts`) — but today that's the whole story, because
+  there's exactly one API instance and nowhere else to route to. At scale, that same fast failure needs to
+  also fail the instance's own health check, so a load balancer stops sending it new traffic while it
+  recovers, rather than every instance independently timing out against the same struggling database.
+- **A dead-letter path for the event bus.** The outbox-pattern event publishing mentioned below has no
+  retry/DLQ story yet because there's no consumer for it to fail to reach — a matching service, analytics,
+  or notifications. Once one exists, a failed delivery needs bounded retries with backoff and a
+  dead-letter queue so a permanently-failing event doesn't block every event behind it.
+
+**Why not now:** there is exactly one API instance and no downstream service to call — a circuit breaker
+with nothing on the other side to trip on, or a DLQ for a queue that doesn't exist yet, would be
+speculative infrastructure with no real failure mode to test it against.
 
 ## Supporting infrastructure a real production system would add
 

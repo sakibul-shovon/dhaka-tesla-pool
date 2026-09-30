@@ -43,6 +43,27 @@
       "when": 1790410512344,
       "tag": "0005_wallet_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790439360342,
+      "tag": "0006_admin_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790528844885,
+      "tag": "0007_account_status_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790528854259,
+      "tag": "0008_account_history_immutability",
+      "breakpoints": true
     }
   ]
 }

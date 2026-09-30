@@ -1,91 +1,182 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Car, ShieldCheck, User as UserIcon } from "lucide-react";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
+import { useRetryCountdown } from "../../lib/useRetryCountdown.js";
 import { ErrorBanner } from "../../components/ui/ErrorBanner.js";
+import { Input } from "../../components/ui/Input.js";
+import { PasswordInput } from "../../components/ui/PasswordInput.js";
+import { Button } from "../../components/ui/Button.js";
+import { useToast } from "../../components/ui/Toast.js";
+import { AuthSplitLayout } from "./AuthSplitLayout.js";
 import type { User } from "../../lib/types.js";
 
+// Only the email, never the password — sessionStorage isn't encrypted and
+// a password has no business surviving a tab reload. This exists because
+// a backgrounded tab can lose all in-memory state to the browser's own
+// memory-saving discard-and-reload behavior; it's a draft, not real
+// persistence, so it's cleared the moment login actually succeeds.
+const EMAIL_DRAFT_KEY = "dtp-login-email-draft";
+
+function readEmailDraft(): string {
+  try {
+    return sessionStorage.getItem(EMAIL_DRAFT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeEmailDraft(value: string): void {
+  try {
+    sessionStorage.setItem(EMAIL_DRAFT_KEY, value);
+  } catch {
+    // Best-effort only — the field still works for this page view.
+  }
+}
+
+function clearEmailDraft(): void {
+  try {
+    sessionStorage.removeItem(EMAIL_DRAFT_KEY);
+  } catch {
+    // Nothing to clean up if storage was never writable.
+  }
+}
+
+// The demo cast's shared password (.env.example's DEMO_PASSWORD default,
+// documented in the README as the demo credential for evaluators) — not a
+// secret, the whole point of a demo account. Fills the fields; it does not
+// submit, so an evaluator sees which account they're about to use before
+// committing to it.
+const DEMO_PASSWORD = "dhaka-tesla-demo";
+const DEMO_ACCOUNTS = [
+  { role: "Passenger", name: "Nusrat", email: "nusrat@dhakateslapool.test", Icon: UserIcon },
+  { role: "Driver", name: "Jashim", email: "jashim@dhakateslapool.test", Icon: Car },
+  { role: "Admin", name: "Admin", email: "admin@dhakateslapool.test", Icon: ShieldCheck },
+] as const;
+
 export function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(readEmailDraft);
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const justRegistered = (location.state as { justRegistered?: boolean } | null)?.justRegistered ?? false;
+  const { showToast } = useToast();
+  const justRegistered =
+    (location.state as { justRegistered?: boolean } | null)?.justRegistered ?? false;
+
+  useEffect(() => {
+    if (justRegistered) {
+      showToast({ message: "Account created — sign in below.", tone: "success" });
+    }
+    // Fire once for the arrival that carried this state, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const login = useMutation({
     mutationFn: () => api.post<User>("/auth/login", { email, password }),
     onSuccess: (user) => {
+      clearEmailDraft();
       queryClient.setQueryData(["auth", "me"], user);
       navigate("/p", { replace: true });
     },
   });
+
+  const retrySeconds = useRetryCountdown(login.error);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     login.mutate();
   }
 
+  function fillDemoAccount(account: (typeof DEMO_ACCOUNTS)[number]) {
+    setEmail(account.email);
+    writeEmailDraft(account.email);
+    setPassword(DEMO_PASSWORD);
+  }
+
   return (
-    <div className="mx-auto mt-16 max-w-sm rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
-      <h1 className="text-xl font-bold text-neutral-900">Dhaka Tesla Pool</h1>
-      <p className="mt-1 text-sm text-neutral-500">Share a seat. Split the fare.</p>
+    <AuthSplitLayout>
+      <h1 className="font-display text-2xl font-bold text-text">Welcome back</h1>
+      <p className="mt-1 text-sm text-text-muted">Sign in to request or manage your ride.</p>
 
-      {justRegistered && (
-        <p className="mt-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
-          Account created — sign in below.
+      <div className="mt-5 rounded-xl border border-border-strong bg-surface-raised p-3">
+        <p className="text-xs font-medium text-text-muted">
+          Evaluating this project? Fill a demo account, then sign in:
         </p>
-      )}
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {DEMO_ACCOUNTS.map((account) => (
+            <Button
+              key={account.email}
+              type="button"
+              variant="secondary"
+              icon={<account.Icon size={14} strokeWidth={2.25} />}
+              onClick={() => fillDemoAccount(account)}
+              className="px-2 text-xs"
+            >
+              {account.role}
+            </Button>
+          ))}
+        </div>
+      </div>
 
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-        <label className="block text-sm text-neutral-700">
-          Email
-          <input
+      <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="block text-sm font-medium text-text">
+            Email
+          </label>
+          <Input
+            id="email"
             type="email"
             required
             autoComplete="email"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 text-sm"
+            onChange={(event) => {
+              setEmail(event.target.value);
+              writeEmailDraft(event.target.value);
+            }}
           />
-        </label>
-        <label className="block text-sm text-neutral-700">
-          Password
-          <input
-            type="password"
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="password" className="block text-sm font-medium text-text">
+            Password
+          </label>
+          <PasswordInput
+            id="password"
             required
             autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="mt-1 w-full rounded border border-neutral-300 px-3 py-2 text-sm"
           />
-        </label>
+        </div>
 
         {login.isError && (
           <ErrorBanner
             message={
-              login.error instanceof ApiError
-                ? messageForError(login.error.code, login.error.message)
-                : "Something went wrong."
+              retrySeconds
+                ? `Too many attempts. Try again in ${retrySeconds}s.`
+                : login.error instanceof ApiError
+                  ? messageForError(login.error.code, login.error.message)
+                  : "Something went wrong."
             }
           />
         )}
 
-        <button
+        <Button
           type="submit"
-          disabled={login.isPending}
-          className="w-full rounded bg-[--color-accent] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          disabled={login.isPending || Boolean(retrySeconds)}
+          className="w-full"
         >
           {login.isPending ? "Signing in…" : "Sign in"}
-        </button>
+        </Button>
       </form>
 
-      <p className="mt-4 text-center text-sm text-neutral-500">
+      <p className="mt-5 text-center text-sm text-text-muted">
         New here?{" "}
-        <Link to="/register" className="font-medium text-[--color-accent] underline">
+        <Link to="/register" className="font-medium text-accent-strong hover:underline">
           Create an account
         </Link>
       </p>
-    </div>
+    </AuthSplitLayout>
   );
 }

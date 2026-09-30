@@ -29,7 +29,11 @@ export async function assertInvariants(pool: Pool): Promise<InvariantViolation[]
   }
 
   // Also DB-enforced by the `pools_seats_within_capacity` CHECK.
-  const overCapacity = await pool.query<{ id: string; seats_reserved: number; capacity_snapshot: number }>(`
+  const overCapacity = await pool.query<{
+    id: string;
+    seats_reserved: number;
+    capacity_snapshot: number;
+  }>(`
     SELECT id, seats_reserved, capacity_snapshot FROM pools
     WHERE seats_reserved < 0 OR seats_reserved > capacity_snapshot
   `);
@@ -92,7 +96,11 @@ export async function assertInvariants(pool: Pool): Promise<InvariantViolation[]
     });
   }
 
-  const seatsMismatch = await pool.query<{ id: string; membership_seats: number; request_seats: number }>(`
+  const seatsMismatch = await pool.query<{
+    id: string;
+    membership_seats: number;
+    request_seats: number;
+  }>(`
     SELECT m.id, m.seats AS membership_seats, r.seats AS request_seats
     FROM pool_memberships m
     JOIN ride_requests r ON r.id = m.ride_request_id
@@ -108,7 +116,11 @@ export async function assertInvariants(pool: Pool): Promise<InvariantViolation[]
   // I14 (plan §10.7): the latest history row's to_status is always the
   // aggregate's current status — a single write path (applyRideTransition /
   // applyPoolTransition) is what makes this provable rather than hopeful.
-  const rideHistoryDrift = await pool.query<{ id: string; status: string; last_to_status: string | null }>(`
+  const rideHistoryDrift = await pool.query<{
+    id: string;
+    status: string;
+    last_to_status: string | null;
+  }>(`
     SELECT r.id, r.status, h.to_status AS last_to_status
     FROM ride_requests r
     LEFT JOIN LATERAL (
@@ -125,7 +137,11 @@ export async function assertInvariants(pool: Pool): Promise<InvariantViolation[]
     });
   }
 
-  const poolHistoryDrift = await pool.query<{ id: string; status: string; last_to_status: string | null }>(`
+  const poolHistoryDrift = await pool.query<{
+    id: string;
+    status: string;
+    last_to_status: string | null;
+  }>(`
     SELECT p.id, p.status, h.to_status AS last_to_status
     FROM pools p
     LEFT JOIN LATERAL (
@@ -175,6 +191,24 @@ export async function assertInvariants(pool: Pool): Promise<InvariantViolation[]
   `);
   for (const row of negativeFares.rows) {
     violations.push({ invariant: "no negative fare", detail: `row ${row.id}` });
+  }
+
+  // ADR-019: suspension is refused while a driver has an active pool, and
+  // accept re-checks is_online under the same vehicle lock suspension takes
+  // -- so this combination should be unreachable regardless of which side
+  // of that race wins.
+  const suspendedDriverWithActivePool = await pool.query<{ user_id: string; pool_id: string }>(`
+    SELECT u.id AS user_id, p.id AS pool_id
+    FROM users u
+    JOIN vehicles v ON v.driver_id = u.id
+    JOIN pools p ON p.vehicle_id = v.id
+    WHERE u.status = 'SUSPENDED' AND p.status IN ('OPEN', 'DRIVER_ARRIVED', 'STARTED')
+  `);
+  for (const row of suspendedDriverWithActivePool.rows) {
+    violations.push({
+      invariant: "no suspended driver holds an active pool (ADR-019)",
+      detail: `driver ${row.user_id}: pool ${row.pool_id}`,
+    });
   }
 
   return violations;

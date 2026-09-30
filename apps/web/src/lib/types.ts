@@ -4,11 +4,29 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: "PASSENGER" | "DRIVER";
+  role: "PASSENGER" | "DRIVER" | "ADMIN";
   status: "ACTIVE" | "SUSPENDED";
 }
 
-export type RideStatus = "REQUESTED" | "MATCHED" | "DRIVER_ARRIVED" | "STARTED" | "COMPLETED" | "CANCELLED";
+export interface DriverVehicle {
+  id: string;
+  name: string;
+  capacity: number;
+  isOnline: boolean;
+  currentZone: string | null;
+}
+
+export interface Driver {
+  id: string;
+  name: string;
+  email: string;
+  status: "ACTIVE" | "SUSPENDED";
+  createdAt: string;
+  vehicle: DriverVehicle;
+}
+
+export type RideStatus =
+  "REQUESTED" | "MATCHED" | "DRIVER_ARRIVED" | "STARTED" | "COMPLETED" | "CANCELLED";
 
 export interface RideRequest {
   id: string;
@@ -69,13 +87,30 @@ export interface Zone {
   yDkm: number;
 }
 
+export interface WalletSummary {
+  balancePaisa: number;
+}
+
+export interface WalletTransaction {
+  id: string;
+  type: "TOPUP" | "DEBIT";
+  amountPaisa: number;
+  rideRequestId: string | null;
+  createdAt: string;
+}
+
 export interface FareQuote {
   distanceDkm: number;
   soloFarePaisa: number;
   pooledFarePaisa: number;
 }
 
-export const ACTIVE_RIDE_STATUSES: readonly RideStatus[] = ["REQUESTED", "MATCHED", "DRIVER_ARRIVED", "STARTED"];
+export const ACTIVE_RIDE_STATUSES: readonly RideStatus[] = [
+  "REQUESTED",
+  "MATCHED",
+  "DRIVER_ARRIVED",
+  "STARTED",
+];
 export const TERMINAL_RIDE_STATUSES: readonly RideStatus[] = ["COMPLETED", "CANCELLED"];
 
 export interface DriverStatus {
@@ -150,4 +185,88 @@ export interface PoolStatusHistoryEntry {
   actorUserId: string | null;
   reason: string | null;
   createdAt: string;
+}
+
+// Admin panel (ADR-019) — read-mostly oversight plus account suspension.
+export interface AccountSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: "PASSENGER" | "DRIVER" | "ADMIN";
+  status: "ACTIVE" | "SUSPENDED";
+  createdAt: string;
+}
+
+export interface AccountStatusHistoryEntry {
+  id: number;
+  fromStatus: "ACTIVE" | "SUSPENDED";
+  toStatus: "ACTIVE" | "SUSPENDED";
+  actorUserId: string;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface AccountDetail extends AccountSummary {
+  statusHistory: AccountStatusHistoryEntry[];
+  passenger: {
+    recentRides: RideRequest[];
+    wallet: { balancePaisa: number; transactions: WalletTransaction[] };
+  } | null;
+  driver: {
+    vehicle: DriverVehicle | null;
+    recentPools: PoolWithEarnings[];
+  } | null;
+}
+
+// Unlike the passenger's own RideRequest, this carries the rider's identity
+// (ADR-019 draws the "co-riders see a count, admins see a name" line here)
+// and never carries `pool` on the list — only the detail view does.
+export interface AdminRideRequest {
+  id: string;
+  passengerId: string;
+  passengerName: string;
+  passengerEmail: string;
+  pickupZone: string;
+  dropoffZone: string;
+  seats: number;
+  distanceDkm: number;
+  soloFarePaisa: number;
+  pooledFarePaisa: number;
+  paymentMethod: "CASH" | "TESLAPAY";
+  status: RideStatus;
+  cancelReason: string | null;
+  createdAt: string;
+  matchedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+}
+
+export interface AdminRidePool extends PoolSummaryForRide {
+  members: PoolMember[];
+}
+
+export interface AdminRideDetail extends AdminRideRequest {
+  pool: AdminRidePool | null;
+  history: RideStatusHistoryEntry[];
+}
+
+export interface AdminZoneStats {
+  zoneCode: string;
+  zoneName: string;
+  onlineDrivers: number;
+  openRequests: number;
+  activePools: number;
+}
+
+export interface AdminStats {
+  totals: {
+    totalRides: number;
+    activeRides: number;
+    completedRides: number;
+    cancelledRides: number;
+    onlineDrivers: number;
+    activePools: number;
+  };
+  byZone: AdminZoneStats[];
 }

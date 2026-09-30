@@ -17,6 +17,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryFn: () => api.get<User>("/auth/me"),
     retry: false,
     staleTime: Infinity,
+    // A logged-out visitor's query holds no data, and Query treats no data
+    // as stale regardless of staleTime — so the app-wide refetch-on-focus
+    // re-ran this check on every return to the tab. Re-running it resets the
+    // query to its initial loading state, the route guards swap the page
+    // for a spinner, and the login/register form unmounts and loses what was
+    // typed. Nothing is lost by opting out: an expired session is still
+    // caught by the very next API call's 401 (onUnauthorized below).
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   useEffect(() => {

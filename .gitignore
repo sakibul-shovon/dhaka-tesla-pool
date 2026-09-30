@@ -10,6 +10,9 @@ build/
 .env.*
 !.env.example
 
+# local dev-only compose overrides (e.g. Vite dev-server origin overrides)
+docker-compose.override.yml
+
 # test & tooling output
 coverage/
 playwright-report/

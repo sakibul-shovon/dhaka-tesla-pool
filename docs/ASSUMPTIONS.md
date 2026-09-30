@@ -31,9 +31,14 @@ consequence — not a footnote.
 | A23 | Max 3 seats per request (product), DB allows 1..6 (physical) | Bullet has 3 seats | Config value |
 | A24 | `EMAIL_TAKEN` is disclosed on registration | Usability; mitigated by rate limit | Switch to email-verification flow with generic response |
 | A25 | Timestamps stored UTC, displayed Asia/Dhaka | — | — |
-| A26 | Public deployment is preferred, not mandatory (PRD §6/§14); Compose is the guaranteed path | PRD wording | If evaluators require a live URL, the free stack in `docs/DEPLOYMENT.md` already provides one |
+| A26 | Public deployment is preferred, not mandatory (PRD §6/§14); Compose is the guaranteed path | PRD wording | If evaluators require a live URL, the free stack codified in `render.yaml`/`netlify.toml` (see the README's Deployment section) already provides one |
+| A27 | Suspension is refused while the account has an active ride or pool; it never changes ride/pool state | Keeps the state machines and C1–C16 untouched ([ADR-019](decisions/ADR-019-admin-panel-scope.md)) | Add an admin actor to the state machines, with its own concurrency tests |
+| A28 | A passenger request already in flight when a suspension commits still completes (≤ 1 ride) | Closing it means locking the user row inside ride creation — the hot booking path | Re-check `users.status` under a user-row lock in the write transaction |
 
 ## Notes on assumptions that turned out differently than first planned
+
+- **A27/A28** were added with the admin panel (`feature/admin-panel`), after this table's first 26 rows —
+  the register itself is append-only, the same way the ride/pool/account history tables are.
 
 - **A20** was written as "P2, only if P0/P1 are done" when the plan was drafted before any code
   existed. `feature/teslapay-wallet` (Session 11) shipped it after the full MVP and concurrency-safety

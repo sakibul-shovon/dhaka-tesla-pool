@@ -38,4 +38,18 @@ describe("LockOrderGuard (plan §10.2)", () => {
     guard.assert("requests");
     expect(() => guard.assert("pool")).toThrow(/Lock order violation/);
   });
+
+  it("allows locking a vehicle then a user (ADR-019 suspension)", () => {
+    const guard = createLockOrderGuard();
+    expect(() => {
+      guard.assert("vehicle");
+      guard.assert("user");
+    }).not.toThrow();
+  });
+
+  it("rejects locking a vehicle after a user is already locked", () => {
+    const guard = createLockOrderGuard();
+    guard.assert("user");
+    expect(() => guard.assert("vehicle")).toThrow(/Lock order violation/);
+  });
 });

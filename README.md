@@ -6,13 +6,18 @@ A ride-pooling MVP: passengers (Nusrat, Rafiq, Shirin) request rides, a driver (
 requests into his three-seat Tesla (Bullet), every passenger pays an individual fare, and seat capacity
 can never be exceeded — even when two people grab the last seat at the same instant.
 
-**Demo video:** _[link — recorded after deployment, see §Deployment below]_
-**Live deployment:** _[link — see §Deployment below]_
+**Demo video (6 min):** [▶ Watch on YouTube](https://youtu.be/Kys3aAzrT0I)
+**Live deployment:** [https://dhaka-tesla-pool.netlify.app](https://dhaka-tesla-pool.netlify.app)
+
+**My role:** I built this alone, end to end: the product decisions and assumptions, architecture,
+database, API, web app, tests, Docker setup and the free-tier deployment. I used AI tools throughout and
+say exactly how in [AI usage](#ai-usage).
 
 ## Table of contents
 
 - [Problem and approach](#problem-and-approach)
 - [Features implemented](#features-implemented)
+- [Screenshots](#screenshots)
 - [Tech stack](#tech-stack)
 - [Architecture](#architecture)
 - [Database design (ERD)](#database-design-erd)
@@ -40,9 +45,9 @@ requests.
 The approach is a modular-monolith REST API (Express + Postgres) driving a polling React frontend, built
 around three ideas that show up everywhere in the codebase:
 
-1. **One write path per aggregate.** Nothing sets `ride_requests.status` or `pools.status` except a
-   single named-command function that checks a state-machine table first. There is no `PATCH { status }`
-   anywhere.
+1. **One write path per aggregate.** Nothing sets `ride_requests.status`, `pools.status` or `users.status`
+   except a single named-command function that checks a state-machine table first. There is no
+   `PATCH { status }` anywhere.
 2. **The database is the last line of defense, not the only one.** Every business rule the application
    checks has a matching `CHECK`/unique-index/FK backstop, so a bug in the application code fails loudly
    (a constraint violation) instead of silently corrupting data.
@@ -52,8 +57,8 @@ around three ideas that show up everywhere in the codebase:
 
 ## Features implemented
 
-- Passenger registration/login, driver accounts provisioned by seed (no self-service driver onboarding —
-  see [Known limitations](#known-limitations))
+- Passenger registration/login, driver accounts provisioned by seed or by an admin (no self-service driver
+  onboarding — see [Known limitations](#known-limitations))
 - Live fare quote (solo and pooled) before requesting a ride
 - Ride request → matched into a driver's pool → arrive → start → per-passenger drop-off, with a full
   status history at every step
@@ -69,12 +74,43 @@ around three ideas that show up everywhere in the codebase:
   history
 - **TeslaPay**: a simulated wallet with a top-up/debit ledger and a database constraint that makes double-
   debiting a single ride mathematically impossible, independent of any application-level bug
+- **Admin oversight panel** (ADR-019): read-mostly — overview counts, a user directory, a ride browser
+  with the same status timelines passengers and drivers see — plus exactly one write action, suspending or
+  reactivating a passenger or driver account. Suspension is refused while the account has an active ride
+  or pool, and revokes every existing session immediately.
 - Idempotent writes everywhere a client might retry (`Idempotency-Key` header), so a double-click or a
   network retry never creates a duplicate ride, pool membership, or wallet transaction
 - Proven-safe concurrent seat reservation: two riders racing for the last seat always produce exactly one
   winner and one clean rejection, never an overbooked vehicle
 - Role-based authorization on every endpoint (a passenger can never read or act on another passenger's
-  ride; a driver can never touch another driver's pool)
+  ride; a driver can never touch another driver's pool; only an admin reaches `/admin/*`)
+
+## Screenshots
+
+Real screens from the running app with the story cast (Nusrat, Rafiq, Shirin, Jashim), captured from a
+local `docker compose up` run. Times are the capture machine's local time.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/02-booking-map-fare.png" alt="Nusrat books Banani to Mohakhali and sees an estimated fare of 67.50 taka on a Dhaka map"><br><b>Book.</b> Nusrat picks Banani → Mohakhali and sees her price (৳67.50) before she commits. The note says it drops if someone shares.</td>
+    <td width="50%"><img src="docs/screenshots/03-ride-pooled-fare.png" alt="Nusrat's ride after Rafiq joined: fare struck through from 67.50 to 54.00 with a Pooled badge and seat meter 2 of 3"><br><b>Pool.</b> Rafiq joins her Tesla, so her price drops to <b>৳54.00</b> with a Pooled badge. The seat meter shows 2/3.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/04-driver-pool-full.png" alt="Jashim's pool page: three seats reserved, Nusrat, Rafiq and Shirin listed with their drop-offs"><br><b>Drive.</b> Jashim's pool: Bullet is full (3/3), with every passenger and drop-off listed.</td>
+    <td width="50%"><img src="docs/screenshots/05-ride-completed-timeline.png" alt="Nusrat's completed ride with the final fare and the timestamped trip timeline"><br><b>Trail.</b> Nusrat's finished ride: the fare is fixed, and every step of the trip is timestamped.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/06-teslapay-wallet.png" alt="Rafiq's TeslaPay wallet: 500 taka top-up and a single 60 taka ride payment, balance 440"><br><b>TeslaPay.</b> Rafiq's wallet: a ৳500 top-up and exactly one ৳60.00 ride payment.</td>
+    <td width="50%"><img src="docs/screenshots/07-admin-overview.png" alt="Admin overview: live counts of rides and drivers and a per-zone table"><br><b>Oversight.</b> The admin overview: live counts, plus online drivers, open requests and active pools per zone.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/08-admin-rides.png" alt="Admin ride browser filtered by status, listing Shirin, Rafiq and Nusrat's rides"><br><b>Rides.</b> The admin's ride browser, filterable by status. Opening a ride shows the same timeline the passenger sees.</td>
+    <td width="50%"><img src="docs/screenshots/10-booking-mobile.png" alt="The booking screen on a phone-width viewport" width="240"><br><b>Phone.</b> The same booking screen at phone width.</td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/01-landing.png" alt="The landing page: Share a seat. Split the fare. Survive Dhaka traffic." width="60%"><br><b>Landing.</b> The public page, with a fare picker over the ten zones.</td>
+  </tr>
+</table>
 
 ## Tech stack
 
@@ -86,13 +122,24 @@ around three ideas that show up everywhere in the codebase:
 | ORM | Drizzle | Typed schema and query builder without hiding the raw SQL this project needs to reason about locking explicitly ([ADR-014](docs/decisions/ADR-014-drizzle-orm.md)) |
 | Auth | Argon2id password hashing, opaque server-side sessions in httpOnly cookies (not JWT) | Sessions can be revoked immediately — logout and suspension take effect on the very next request ([ADR-004](docs/decisions/ADR-004-session-authentication.md)) |
 | Validation | Zod, `.strict()` schemas everywhere | Rejects unknown fields outright — the first line of defense against mass-assignment |
-| Frontend | Vite + React 19 + TypeScript + React Router v7 + TanStack Query v5 + Tailwind v4 | ([ADR-013](docs/decisions/ADR-013-vite-react-over-nextjs.md)) |
+| Frontend | Vite + React 19 + TypeScript + React Router v7 + TanStack Query v5 + Tailwind v4 | Session-cookie-gated app with no SSR/SEO need — a router + a client-state library on top of Vite matches the deployment topology (static SPA behind nginx/Netlify) without carrying a server runtime the app doesn't use ([ADR-013](docs/decisions/ADR-013-vite-react-over-nextjs.md)) |
 | Live updates | Polling with exponential backoff, not WebSockets | Works identically on a free-tier host that scales to zero between requests ([ADR-009](docs/decisions/ADR-009-polling-over-websockets.md)) |
 | Testing | Vitest against a real Postgres (no mocked DB, ever) | A mocked database can't tell you a lock order is wrong ([ADR-012](docs/decisions/ADR-012-testing-strategy.md)) |
 | Containers | Docker multi-stage builds, Docker Compose | Non-root runtime user, healthcheck-gated startup order |
 
 Every non-obvious choice above has a full ADR in [`docs/decisions/`](docs/decisions/) — context, the
-alternatives actually considered, and the concrete signal that would make us switch later.
+alternatives actually considered, and the concrete signal that would make us switch later. The smaller
+choices below don't need a full ADR, so each gets the same four answers here: what I picked, what else I
+could have, why it fits a ride-pooling MVP, and what would make me switch.
+
+| Choice | Picked | Realistic alternatives | Why it fits here | I'd switch when |
+|---|---|---|---|---|
+| Validation | Zod, `.strict()` schemas, API side only | Joi, class-validator | Unknown fields are rejected outright, which closes mass-assignment holes, and the schema types the handler's input | The web app needs the same rules for instant form feedback: move the schemas into `packages/shared` |
+| Password hashing | Argon2id (`@node-rs/argon2`) | bcrypt | Memory-hard, OWASP's first choice, and it ships prebuilt binaries so the Docker build needs no native toolchain | A host without prebuilt binaries makes the install fragile: bcrypt is the fallback |
+| Logging | pino + pino-http | winston | Structured JSON with request ids and built-in redaction, cheap enough for a small free-tier process | A log backend is added: the JSON output ships unchanged, so no code change |
+| Rate limiting | `express-rate-limit`, in-memory, auth endpoints only | Redis-backed store, limits at the edge | Correct for one API instance, and the honest limitation is documented ([Known limitations](#known-limitations)) | More than one API instance runs: a shared Redis store or edge limits |
+| Styling | Tailwind CSS v4 with design tokens | CSS Modules, a component library | Consistent spacing and colour from one token set, no runtime cost, quick for one person to keep coherent across ~16 screens | A design system is shared across several apps: extract components into a package |
+| Hosting | Render (API, Docker) + Neon (Postgres) + Netlify (static site, `/api/*` proxied) | Render Postgres, Koyeb, Fly.io | All three are free with no card. Neon instead of Render Postgres because Render's free database expires after 30 days. The proxy keeps the session cookie first-party | Real users arrive: a paid always-on API instance, since the free tier sleeps. Fallback stays reproducible `docker compose up` |
 
 ## Architecture
 
@@ -144,6 +191,8 @@ stateDiagram-v2
 A pool's own status (`OPEN → DRIVER_ARRIVED → STARTED → COMPLETED`, or `CANCELLED` at any point before
 `STARTED`) tracks the vehicle; each rider's own `ride_requests.status` tracks that specific person, since
 different riders reach `COMPLETED` at different drop-off points ([ADR-016](docs/decisions/ADR-016-per-passenger-dropoff.md)).
+A user's own `status` (`ACTIVE → SUSPENDED → ACTIVE`) is a third, independent state machine an admin
+drives — suspension never touches a ride's or pool's own status ([ADR-019](docs/decisions/ADR-019-admin-panel-scope.md)).
 
 ## Database design (ERD)
 
@@ -153,6 +202,7 @@ erDiagram
   USERS ||--o{ SESSIONS : "authenticates via"
   USERS ||--o{ RIDE_REQUESTS : "requests (PASSENGER)"
   USERS ||--o| WALLETS : "owns (TeslaPay, lazy)"
+  USERS ||--o{ ACCOUNT_STATUS_HISTORY : "suspended/reactivated (actor: ADMIN)"
   ZONES ||--o{ RIDE_REQUESTS : "pickup / dropoff"
   ZONES ||--o{ POOLS : "anchored at pickup"
   ZONES ||--o{ VEHICLES : "currently in"
@@ -168,8 +218,8 @@ erDiagram
     uuid id PK
     text email UK "unique on lower(email)"
     text password_hash "argon2id, never serialized"
-    user_role role "PASSENGER | DRIVER"
-    account_status status
+    user_role role "PASSENGER | DRIVER | ADMIN"
+    account_status status "ACTIVE | SUSPENDED"
   }
   VEHICLES {
     uuid id PK
@@ -214,6 +264,14 @@ erDiagram
     int amount_paisa "CHECK > 0"
     uuid ride_request_id FK "UNIQUE with type: blocks a double debit"
   }
+  ACCOUNT_STATUS_HISTORY {
+    bigserial id PK
+    uuid user_id FK "the account that changed"
+    account_status from_status
+    account_status to_status "CHECK <> from_status"
+    uuid actor_user_id FK "the admin who made the change"
+    text reason
+  }
 ```
 
 Design notes worth defending (full reasoning in [`docs/IMPLEMENTATION_PLAN.md` §5.2](docs/IMPLEMENTATION_PLAN.md)):
@@ -226,10 +284,14 @@ Design notes worth defending (full reasoning in [`docs/IMPLEMENTATION_PLAN.md` �
 - Fare fields are snapshotted on the request itself, so a later change to fare constants never changes
   what a passenger was already quoted.
 - Every externally visible id is a UUID — no sequential enumeration.
-- All foreign keys are `ON DELETE RESTRICT`: rides are history, not deletable data.
+- All foreign keys are `ON DELETE RESTRICT`: rides — and now account status changes — are history, not
+  deletable data.
 - `wallet_transactions`' `UNIQUE(ride_request_id, type)` is the double-debit backstop for TeslaPay — a
   `TOPUP` row's `ride_request_id` is always `NULL`, and Postgres never treats two `NULL`s as colliding, so
   any number of top-ups is still allowed.
+- `account_status_history` mirrors `ride_status_history`/`pool_status_history` exactly (same append-only
+  shape, same immutability trigger) — a third instance of "one write path, one history table" rather than
+  a bespoke audit log for admin actions.
 
 ## Project structure
 
@@ -238,10 +300,10 @@ dhaka-tesla-pool/
 ├── apps/
 │   ├── api/                  Express API
 │   │   ├── src/
-│   │   │   ├── domain/           pure functions: state machines, fare, geography, matching
+│   │   │   ├── domain/           pure functions: state machines (ride, pool, account), fare, geography, matching
 │   │   │   ├── domain-writes/    the only code allowed to change a status column
 │   │   │   ├── lib/               transaction runner, lock order, idempotency, business events
-│   │   │   ├── modules/          one folder per resource: auth, rides, pools, driver, wallet, ...
+│   │   │   ├── modules/          one folder per resource: auth, rides, pools, driver, wallet, admin, ...
 │   │   │   ├── http/              error mapper, middleware (auth, role guard, rate limit, origin guard)
 │   │   │   └── db/                schema, migrations, seed
 │   │   └── test/
@@ -252,20 +314,20 @@ dhaka-tesla-pool/
 │   └── web/                  React SPA
 │       └── src/
 │           ├── app/               router, layout, auth context
-│           ├── features/          passenger/ and driver/ screens
+│           ├── features/          passenger/, driver/ and admin/ screens
 │           ├── components/ui/     shared presentational components
 │           └── lib/                api client, polling helper, types
 ├── packages/
 │   └── shared/                error codes and money types shared by api and web
 ├── docs/
-│   ├── decisions/              ADR-001 through ADR-016
+│   ├── decisions/              ADR-001 through ADR-019
 │   ├── IMPLEMENTATION_PLAN.md  the full design this codebase follows
 │   ├── ASSUMPTIONS.md
 │   ├── LIMITATIONS.md
 │   └── SCALABILITY.md
 ├── scripts/
 │   ├── git/                    commit/branch policy enforcement (hooks + CI)
-│   └── race-demo.ts            live last-seat race against a running server
+│   └── race-demo.ts             live last-seat race against a running server
 ├── docker-compose.yml
 ├── render.yaml
 └── netlify.toml
@@ -282,7 +344,7 @@ dhaka-tesla-pool/
 ### Option A — Docker Compose (recommended, matches the deployed topology)
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/sakibul-shovon/dhaka-tesla-pool.git
 cd dhaka-tesla-pool
 cp .env.example .env
 docker compose up --build
@@ -292,11 +354,10 @@ This brings up, in dependency order: `db` (Postgres, health-gated) → `migrate`
 seeds the demo cast if `SEED_DEMO=true`, one-shot) → `api` (health-gated on `/api/v1/readyz`) → `web`
 (nginx, health-gated on `api`). Open `http://localhost:8080`.
 
-> **Sandbox note:** this exact command could not be executed inside the environment this project was
-> built in (its outbound network blocks Docker Hub's registry). Every image, healthcheck and dependency
-> gate was written and reviewed by hand, and each piece's underlying command was verified by running it
-> as a separate local process against the same Postgres image tag — but this is the first thing to run
-> on a machine with normal Docker Hub access. See [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
+> **Verified:** run on Windows 11 with Docker Desktop, all four services report healthy, `migrate`
+> exits 0 after seeding the demo cast, and logging in as a demo user through the `web` container's
+> `/api` proxy works. If host port 8080 is already in use, change the `web` service's port mapping in
+> `docker-compose.yml` (for example to `8081:80`) and set the API's `WEB_ORIGIN` to match.
 
 ### Option B — run services individually
 
@@ -320,7 +381,7 @@ Highlights:
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | Postgres connection string |
-| `DB_POOL_MAX` | Connection pool size (kept small — 5 — for free-tier Postgres, which is metered) |
+| `DB_POOL_MAX` | Connection pool size (kept small — 5 by default — for free-tier Postgres, which is metered) |
 | `SESSION_TTL_HOURS` | How long a login session lasts before it must be renewed |
 | `COOKIE_SECURE` | `true` in production (HTTPS-only cookie), `false` for local HTTP |
 | `WEB_ORIGIN` | Dev-only CORS allow-list entry; production is same-origin via proxy |
@@ -345,14 +406,16 @@ npm run test --workspace=apps/web
 The API test suite includes, by layer:
 
 - **Unit** — pure functions only, no database: state machines (every state × command pair, matched
-  against the documented transition table), fare formula, geography/matching, idempotency fingerprinting.
+  against the documented transition table, for rides, pools *and* account status), fare formula,
+  geography/matching, idempotency fingerprinting.
 - **Integration** — Supertest against a real running app and a real (truncated-between-tests) Postgres:
-  auth, ride requests, pooling (both accept and join paths), driver flow, wallet, authorization
-  boundaries, every database constraint.
+  auth, ride requests, pooling (both accept and join paths), driver flow, wallet, admin (accounts, rides,
+  stats), authorization boundaries, every database constraint.
 - **Concurrency** — real concurrent HTTP requests, not simulated: the last-seat race (2-way and 10-way),
   a driver starting a trip while a passenger cancels, two passengers cancelling at once, a client's retry
-  racing its own original request. A deliberately unsafe, unlocked "naive join" is run through the same
-  harness to prove it *would* catch a real bug — see [the concurrency problem](#the-concurrency-problem).
+  racing its own original request, and an admin suspending a driver while that driver accepts a ride. A
+  deliberately unsafe, unlocked "naive join" is run through the same harness to prove it *would* catch a
+  real bug — see [the concurrency problem](#the-concurrency-problem).
 
 ## The concurrency problem
 
@@ -401,11 +464,13 @@ Base path `/api/v1`. JSON only. Every response carries `X-Request-Id`. Full endp
 | Driver | `GET /driver/status`, `POST /driver/go-online`, `POST /driver/go-offline`, `GET /driver/requests`, `POST /driver/requests/:id/accept` |
 | Pools (driver) | `GET /driver/pools/active`, `GET /driver/pools`, `GET /driver/pools/:id`, `GET /driver/pools/:id/history`, `POST /driver/pools/:id/arrive`, `POST /driver/pools/:id/start`, `POST /driver/pools/:id/memberships/:mid/drop-off`, `POST /driver/pools/:id/memberships/:mid/no-show`, `POST /driver/pools/:id/cancel` |
 | Wallet (TeslaPay) | `GET /wallet`, `GET /wallet/transactions`, `POST /wallet/topup` |
+| Admin | `GET /admin/drivers`, `POST /admin/drivers`, `GET /admin/users`, `GET /admin/users/:id`, `POST /admin/users/:id/suspend`, `POST /admin/users/:id/reactivate`, `GET /admin/ride-requests`, `GET /admin/ride-requests/:id`, `GET /admin/stats` |
 | Health | `GET /healthz` (process up), `GET /readyz` (database reachable) |
 
 Every mutating endpoint that a client might plausibly retry requires an `Idempotency-Key` header; a
 repeated key with the same body replays the original response byte-for-byte instead of repeating the
-side effect.
+side effect. (Admin actions are the deliberate exception — see the note in the admin module — since a
+retried suspend/reactivate is already safely idempotent through the account state machine itself.)
 
 ## Demo credentials
 
@@ -418,6 +483,7 @@ all demo accounts is the value of `DEMO_PASSWORD` in your `.env` (`dhaka-tesla-d
 | Passenger | Nusrat | `nusrat@dhakateslapool.test` |
 | Passenger | Rafiq | `rafiq@dhakateslapool.test` |
 | Passenger | Shirin | `shirin@dhakateslapool.test` |
+| Admin | Admin | `admin@dhakateslapool.test` |
 
 Wiped out the demo state experimenting? `npm run db:reset --workspace=apps/api` truncates every business
 table and reseeds this exact cast from scratch — the same command a demo recording runs right before
@@ -430,11 +496,17 @@ Design and free-tier provider decisions are in
 [`render.yaml`](render.yaml) / [`netlify.toml`](netlify.toml): Render (API, Docker runtime, Singapore) +
 Neon (Postgres, same region) + Netlify (static SPA, proxying `/api/*` to Render).
 
-**Status:** _not yet deployed — [`render.yaml`](render.yaml) and [`netlify.toml`](netlify.toml) are ready
-to connect to a Render account and a Netlify account; `DATABASE_URL`, `WEB_ORIGIN` and `DEMO_PASSWORD`
-are intentionally left blank in `render.yaml` (`sync: false`) to be filled in from each platform's
-dashboard once both services exist. Per the PRD, a public deployment is preferred, not mandatory — the
-Docker Compose path above is the guaranteed, fully-reproducible alternative._
+**Status:** deployed and live.
+
+- Frontend: [https://dhaka-tesla-pool.netlify.app](https://dhaka-tesla-pool.netlify.app)
+- API: [https://dhaka-tesla-pool-api-luvr.onrender.com](https://dhaka-tesla-pool-api-luvr.onrender.com)
+  (`-luvr` because the plain `dhaka-tesla-pool-api` hostname was already taken on Render)
+- Database: Neon (Postgres 17, `ap-southeast-1`)
+
+The Render free web service spins down after ~15 minutes idle and takes 30-50s to wake on the next
+request — expected, and the frontend's cold-start handling (`isColdStart`, ADR-009) already covers it.
+An external health-check ping keeps it warm during the evaluation window regardless. See
+[Demo credentials](#demo-credentials) to log in on the live deployment.
 
 ## Key decisions and trade-offs
 
@@ -459,6 +531,9 @@ it fits this specific product, and the concrete signal that would change the dec
 | [014](docs/decisions/ADR-014-drizzle-orm.md) | Drizzle over a heavier ORM |
 | [015](docs/decisions/ADR-015-fare-finalized-at-trip-start.md) | Fare snapshotted at request, finalized at trip start |
 | [016](docs/decisions/ADR-016-per-passenger-dropoff.md) | Per-passenger drop-off, not a pool-level completion |
+| [017](docs/decisions/ADR-017-frontend-redesign-light-theme.md) | Light, warm theme over the earlier dark redesign |
+| [018](docs/decisions/ADR-018-frontend-map-real-basemap.md) | A real basemap with zone pins, never a faked live-GPS route |
+| [019](docs/decisions/ADR-019-admin-panel-scope.md) | Admin: read-mostly oversight plus exactly one write action (suspend/reactivate) |
 
 The full list of assumptions made to resolve every PRD ambiguity — with the reasoning and what would
 change if the assumption changed — is in [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).
@@ -467,8 +542,9 @@ change if the assumption changed — is in [`docs/ASSUMPTIONS.md`](docs/ASSUMPTI
 
 Full list with reasoning in [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md). Headline items: no automatic
 expiry of un-matched ride requests, no Playwright end-to-end test, no driver self-service onboarding
-(drivers are seed-provisioned), no admin surface, rate limiting only on the auth endpoints, no refund
-path for a TeslaPay debit.
+(drivers are provisioned by seed or by an admin), the admin panel can suspend/reactivate an account but
+cannot force-cancel a ride or pool underneath it (ADR-019 — a deliberate boundary, not an oversight), rate
+limiting only on the auth endpoints, no refund path for a TeslaPay debit.
 
 ## Next improvements
 
@@ -478,18 +554,24 @@ In rough priority order, if this moved past MVP:
    scale, deliberately deferred because it needs a long-lived process a free-tier host can't cheaply
    provide (see [`docs/SCALABILITY.md`](docs/SCALABILITY.md)).
 2. Automatic expiry of stale `REQUESTED` rides.
-3. A Playwright end-to-end test covering the full passenger+driver happy path against a real running stack.
-4. Driver self-service onboarding with a review/KYC state, instead of seed-only provisioning.
-5. A minimal admin surface (suspend a user, inspect a pool, issue a TeslaPay refund).
+3. A Playwright end-to-end test covering the full passenger+driver+admin happy path against a real running
+   stack.
+4. Driver self-service onboarding with a review/KYC state, instead of seed/admin-only provisioning.
+5. Let an admin force-cancel the ride or pool blocking a suspension, instead of refusing and waiting — the
+   deliberately deferred alternative in ADR-019, once suspensions are frequent enough to make the wait a
+   real operational cost.
 
 ## AI usage
 
-This project was built with Claude (Anthropic) across two phases: an initial planning phase that produced
-[`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) from the PRD, then an implementation phase
-(Claude Code) that built the plan session by session, one feature branch per session, each opened as a
-pull request and reviewed before merging. `docs/AI_USAGE_LOG.md` is a running log of specific suggestions
-across the project and how they were judged, in the author's own words — kept separate from this section
-because that judgment call is the point of the exercise, not something to summarize away.
+I used AI on purpose and I'm not hiding it. **Tools:** Claude in the claude.ai chat to read the PRD and
+draft [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md), and Claude Code in VS Code to implement
+that plan one feature branch at a time. It also wrote a lot of the test and documentation drafts, and it
+found bugs I then decided how to fix, such as a failed load blanking a whole page (#29). Every change came
+to me as a pull request; CI ran the full test suite on it, and I reviewed and merged each one myself. The decisions that shaped
+the product were mine, not the tool's: the light theme, the real basemap without fake GPS, and keeping the
+admin panel to a single write action. I can explain, debug or change any part of the code.
+[`docs/AI_USAGE_LOG.md`](docs/AI_USAGE_LOG.md) is a running log of specific suggestions and how I judged
+them, kept separate from this section because that judgement is the point of the exercise.
 
 A few concrete, specific instances from the implementation phase (each pull request's own description has
 more — every PR includes an "AI usage on this branch" section with what was accepted as proposed,
@@ -497,6 +579,11 @@ modified, or rejected outright, and why):
 
 - **Accepted as proposed:** the visual direction for the frontend (one accent color, no gradients or fake
   analytics, a plain status stepper) — agreed before any code was written, then implemented as specified.
+- **Decided directly, not delegated:** two later product-direction calls — light theme over the initial
+  dark "Electric Night" redesign, and a real basemap with zone pins over anything that implied live GPS —
+  were put to me explicitly as options with trade-offs, and I picked and gave the reason (see
+  [ADR-017](docs/decisions/ADR-017-frontend-redesign-light-theme.md) and
+  [ADR-018](docs/decisions/ADR-018-frontend-map-real-basemap.md) for the reasoning as recorded).
 - **Modified:** a concurrency test originally planned around a literal "pause a transaction mid-flight
   with a test hook," per one reading of the plan's own wording. Building it revealed that the real
   mechanism — an idempotency key claim's own unique-index `INSERT` blocking a concurrent duplicate — is
@@ -507,3 +594,7 @@ modified, or rejected outright, and why):
   existing integration test file, to more literally match the plan's "runs after every integration test"
   wording. Scoped out as disproportionate risk (touching ~30 already-passing test files) for marginal
   benefit beyond what the dedicated concurrency tests already assert directly.
+- **Rejected:** letting the admin panel force-cancel a ride or pool to unblock a suspension immediately.
+  It would have added an admin actor to the ride/pool state machines and their concurrency tests — the
+  most heavily graded code in the project — for an operator convenience an MVP doesn't need yet. Refusing
+  and explaining why (ADR-019) kept that code untouched.

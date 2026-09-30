@@ -1,5 +1,10 @@
 import type { ErrorRequestHandler, Request, Response } from "express";
 import { ERROR_CODES, type ErrorCode } from "@dhaka-tesla-pool/shared";
+import { isDatabaseUnreachable } from "../lib/pg-errors.js";
+
+// Neon's free tier wakes in "well under a second to a few seconds"
+// (IMPLEMENTATION_PLAN §18.3); a few seconds is a fair first retry.
+const DB_RETRY_AFTER_SECONDS = 5;
 
 // The one place allowed to put an error on the wire (plan §12.1, §13.1
 // API8): never leak a stack trace or raw driver error to the client.
@@ -57,6 +62,16 @@ export const errorMapper: ErrorRequestHandler = (err, req, res, _next) => {
   }
   if (isMalformedJson(err)) {
     sendError(res, 400, ERROR_CODES.VALIDATION_FAILED, "Malformed JSON body.", id);
+    return;
+  }
+
+  // The database being unreachable (a free-tier Postgres still waking up) is
+  // temporary and not the caller's fault: say so with a 503 and a Retry-After
+  // instead of a generic 500 that reads like a bug.
+  if (isDatabaseUnreachable(err)) {
+    req.log?.warn({ err }, "database unreachable");
+    res.setHeader("Retry-After", String(DB_RETRY_AFTER_SECONDS));
+    sendError(res, 503, ERROR_CODES.SERVICE_UNAVAILABLE, "The database is waking up. Try again in a few seconds.", id);
     return;
   }
 

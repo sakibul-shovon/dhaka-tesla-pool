@@ -1,20 +1,24 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import type { Tx } from "../db/client.js";
-import { rideRequests, pools, vehicles } from "../db/schema.js";
+import { rideRequests, pools, vehicles, users } from "../db/schema.js";
 import type { RideStatus } from "../domain/ride-state-machine.js";
 import type { PoolStatus } from "../domain/pool-state-machine.js";
+import type { AccountStatus } from "../domain/account-state-machine.js";
 import { markLocked, type Locked } from "../domain-writes/locked.js";
 
 // Global lock order (plan §10.2): vehicle -> pool -> ride_requests (ascending
-// id) -> wallet. Every write path that touches more than one of these
+// id) -> wallet -> user. Every write path that touches more than one of these
 // acquires a prefix-respecting subsequence of this order; `LockOrderGuard`
 // makes a mistake fail loudly in dev/test instead of silently risking a
-// deadlock. `wallet` is last: the only write path that locks it alongside
-// anything else is drop-off's TeslaPay debit (plan §8.4), which locks the
-// pool and the ride request first and the wallet only as its final step —
-// top-up locks the wallet alone, so there is no path that could ever want
-// the reverse order.
-const STAGE_RANK = { vehicle: 0, pool: 1, requests: 2, wallet: 3 } as const;
+// deadlock. `wallet` is last of the original four: the only write path that
+// locks it alongside anything else is drop-off's TeslaPay debit (plan §8.4),
+// which locks the pool and the ride request first and the wallet only as its
+// final step — top-up locks the wallet alone, so there is no path that could
+// ever want the reverse order. `user` is newer (ADR-019, account
+// suspension) and sits last for the same reason: nothing else ever locks a
+// user row, so its position only has to be internally consistent with
+// itself — suspending a driver locks their vehicle first, then the user.
+const STAGE_RANK = { vehicle: 0, pool: 1, requests: 2, wallet: 3, user: 4 } as const;
 type LockStage = keyof typeof STAGE_RANK;
 
 export class LockOrderGuard {
@@ -73,7 +77,11 @@ export type LockedPool = Locked<{
   seatsReserved: number;
 }>;
 
-export async function lockPoolById(tx: Tx, id: string, guard: LockOrderGuard): Promise<LockedPool | undefined> {
+export async function lockPoolById(
+  tx: Tx,
+  id: string,
+  guard: LockOrderGuard,
+): Promise<LockedPool | undefined> {
   guard.assert("pool");
   const [row] = await tx
     .select({
@@ -126,4 +134,34 @@ export async function lockRideRequestsByIds(
     .orderBy(asc(rideRequests.id))
     .for("update");
   return rows.map(markLocked);
+}
+
+export type LockedUser = Locked<{
+  id: string;
+  name: string;
+  email: string;
+  role: "PASSENGER" | "DRIVER" | "ADMIN";
+  status: AccountStatus;
+  createdAt: Date;
+}>;
+
+export async function lockUserById(
+  tx: Tx,
+  id: string,
+  guard: LockOrderGuard,
+): Promise<LockedUser | undefined> {
+  guard.assert("user");
+  const [row] = await tx
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      status: users.status,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .where(eq(users.id, id))
+    .for("update");
+  return row ? markLocked(row) : undefined;
 }

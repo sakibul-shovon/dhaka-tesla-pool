@@ -13,6 +13,7 @@ can never be exceeded — even when two people grab the last seat at the same in
 
 - [Problem and approach](#problem-and-approach)
 - [Features implemented](#features-implemented)
+- [Screenshots](#screenshots)
 - [Tech stack](#tech-stack)
 - [Architecture](#architecture)
 - [Database design (ERD)](#database-design-erd)
@@ -79,6 +80,33 @@ around three ideas that show up everywhere in the codebase:
   winner and one clean rejection, never an overbooked vehicle
 - Role-based authorization on every endpoint (a passenger can never read or act on another passenger's
   ride; a driver can never touch another driver's pool; only an admin reaches `/admin/*`)
+
+## Screenshots
+
+Real screens from the running app with the story cast (Nusrat, Rafiq, Shirin, Jashim), captured from a
+local `docker compose up` run. Times are the capture machine's local time.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/02-booking-map-fare.png" alt="Nusrat books Banani to Mohakhali and sees an estimated fare of 67.50 taka on a Dhaka map"><br><b>Book.</b> Nusrat picks Banani → Mohakhali and sees her price (৳67.50) before she commits. The note says it drops if someone shares.</td>
+    <td width="50%"><img src="docs/screenshots/03-ride-pooled-fare.png" alt="Nusrat's ride after Rafiq joined: fare struck through from 67.50 to 54.00 with a Pooled badge and seat meter 2 of 3"><br><b>Pool.</b> Rafiq joins her Tesla, so her price drops to <b>৳54.00</b> with a Pooled badge. The seat meter shows 2/3.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/04-driver-pool-full.png" alt="Jashim's pool page: three seats reserved, Nusrat, Rafiq and Shirin listed with their drop-offs"><br><b>Drive.</b> Jashim's pool: Bullet is full (3/3), with every passenger and drop-off listed.</td>
+    <td width="50%"><img src="docs/screenshots/05-ride-completed-timeline.png" alt="Nusrat's completed ride with the final fare and the timestamped trip timeline"><br><b>Trail.</b> Nusrat's finished ride: the fare is fixed, and every step of the trip is timestamped.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/06-teslapay-wallet.png" alt="Rafiq's TeslaPay wallet: 500 taka top-up and a single 60 taka ride payment, balance 440"><br><b>TeslaPay.</b> Rafiq's wallet: a ৳500 top-up and exactly one ৳60.00 ride payment.</td>
+    <td width="50%"><img src="docs/screenshots/07-admin-overview.png" alt="Admin overview: live counts of rides and drivers and a per-zone table"><br><b>Oversight.</b> The admin overview: live counts, plus online drivers, open requests and active pools per zone.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/08-admin-rides.png" alt="Admin ride browser filtered by status, listing Shirin, Rafiq and Nusrat's rides"><br><b>Rides.</b> The admin's ride browser, filterable by status. Opening a ride shows the same timeline the passenger sees.</td>
+    <td width="50%"><img src="docs/screenshots/10-booking-mobile.png" alt="The booking screen on a phone-width viewport" width="240"><br><b>Phone.</b> The same booking screen at phone width.</td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/01-landing.png" alt="The landing page: Share a seat. Split the fare. Survive Dhaka traffic." width="60%"><br><b>Landing.</b> The public page, with a fare picker over the ten zones.</td>
+  </tr>
+</table>
 
 ## Tech stack
 

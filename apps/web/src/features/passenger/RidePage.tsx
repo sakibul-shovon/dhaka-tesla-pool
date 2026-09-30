@@ -212,7 +212,7 @@ export function RidePage() {
   }
 
   if (rideQuery.isError) {
-    const coldStart = isColdStart(rideQuery as never);
+    const coldStart = isColdStart(rideQuery);
     return (
       <PageContainer className="flex flex-1 items-center">
         <ErrorBanner

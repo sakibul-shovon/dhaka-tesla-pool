@@ -45,7 +45,7 @@ export function AdminOverviewPage() {
       <PageContainer className="flex flex-1 items-center">
         <ErrorBanner
           message="We can't reach the server. Retry."
-          coldStart={isColdStart(statsQuery as never)}
+          coldStart={isColdStart(statsQuery)}
           onRetry={() => void statsQuery.refetch()}
         />
       </PageContainer>

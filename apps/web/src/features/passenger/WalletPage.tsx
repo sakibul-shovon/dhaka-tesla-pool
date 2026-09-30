@@ -150,7 +150,7 @@ export function WalletPage() {
       <PageContainer>
         <ErrorBanner
           message="We can't reach the server. Retry."
-          coldStart={isColdStart(walletQuery as never)}
+          coldStart={isColdStart(walletQuery)}
           onRetry={() => void walletQuery.refetch()}
         />
       </PageContainer>

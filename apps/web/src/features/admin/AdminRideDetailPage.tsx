@@ -37,7 +37,7 @@ export function AdminRideDetailPage() {
       <PageContainer className="flex flex-1 items-center">
         <ErrorBanner
           message="We can't reach the server. Retry."
-          coldStart={isColdStart(query as never)}
+          coldStart={isColdStart(query)}
           onRetry={() => void query.refetch()}
         />
       </PageContainer>

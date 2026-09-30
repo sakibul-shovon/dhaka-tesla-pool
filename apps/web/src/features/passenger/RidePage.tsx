@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, ChevronDown, Clock } from "lucide-react";
+import { ArrowLeft, ChevronDown, Clock, Search } from "lucide-react";
 import { api, ApiError, messageForError } from "../../lib/api-client.js";
 import { createRefetchInterval, isColdStart, POLL_BASE_MS } from "../../lib/polling.js";
 import { useZones } from "../../lib/zones.js";
@@ -154,6 +154,10 @@ export function RidePage() {
   const rideQuery = useQuery({
     queryKey: ["ride-requests", id],
     queryFn: ({ signal }) => api.get<RideRequest>(`/ride-requests/${id}`, signal),
+    // A 404 is a definite answer ("no such ride, or not yours"), not a
+    // flaky connection, so don't spend the automatic retry on it.
+    retry: (failureCount, error) =>
+      !(error instanceof ApiError && error.status === 404) && failureCount < 1,
     refetchInterval: createRefetchInterval<RideRequest>({
       baseMs: POLL_BASE_MS.activeRide,
       isTerminal: (data) => TERMINAL_RIDE_STATUSES.includes(data.status),
@@ -211,8 +215,28 @@ export function RidePage() {
     return <RideSkeleton />;
   }
 
+  // The API answers 404 both for an id that doesn't exist and for another
+  // passenger's ride (never 403 — that would confirm the ride exists), so
+  // this one screen serves both without saying which.
+  if (rideQuery.error instanceof ApiError && rideQuery.error.status === 404) {
+    return (
+      <PageContainer className="flex flex-1 items-center justify-center">
+        <EmptyState
+          icon={Search}
+          title={messageForError("NOT_FOUND", "We couldn't find that ride.")}
+          description="The link may be wrong, or the ride belongs to someone else."
+          action={
+            <Link to="/p" className="text-sm font-medium text-accent-strong hover:underline">
+              Back to booking
+            </Link>
+          }
+        />
+      </PageContainer>
+    );
+  }
+
   if (rideQuery.isError) {
-    const coldStart = isColdStart(rideQuery as never);
+    const coldStart = isColdStart(rideQuery);
     return (
       <PageContainer className="flex flex-1 items-center">
         <ErrorBanner

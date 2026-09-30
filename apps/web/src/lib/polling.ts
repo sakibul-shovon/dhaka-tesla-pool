@@ -1,4 +1,4 @@
-import type { Query } from "@tanstack/react-query";
+import type { Query, UseQueryResult } from "@tanstack/react-query";
 
 // Plan §15.4's policy, exactly: base intervals per screen, doubling backoff
 // on consecutive failures (3 -> 6 -> 12 -> 24 -> capped at 30s), stopped
@@ -46,6 +46,12 @@ export function createRefetchInterval<TData>({
 // "Server waking up" (free-tier cold start, plan §15.3/§15.4): true only
 // when a query has *never* succeeded and has at least one failure — a query
 // that was working and then blipped is a different, ordinary error state.
-export function isColdStart(query: Query): boolean {
-  return query.state.dataUpdateCount === 0 && query.state.fetchFailureCount > 0;
+//
+// Takes the object `useQuery` returns, which is what every screen has in
+// hand. An earlier version took a TanStack `Query` (`query.state.…`) and the
+// screens cast their result `as never` to satisfy it: the cast hid that a
+// result has no `.state`, so the first failed load threw inside render and
+// blanked the whole page instead of showing the retry banner.
+export function isColdStart(result: Pick<UseQueryResult, "dataUpdatedAt" | "failureCount">): boolean {
+  return result.dataUpdatedAt === 0 && result.failureCount > 0;
 }

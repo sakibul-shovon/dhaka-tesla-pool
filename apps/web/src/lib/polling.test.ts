@@ -62,16 +62,22 @@ describe("createRefetchInterval (plan §15.4)", () => {
   });
 });
 
+// The shape screens actually pass: the object `useQuery` returns, not a
+// `Query` — `dataUpdatedAt` is 0 until the first success.
+function fakeResult(overrides: { dataUpdatedAt: number; failureCount: number }) {
+  return overrides;
+}
+
 describe("isColdStart", () => {
   it("is true only when nothing has ever succeeded and at least one fetch failed", () => {
-    expect(isColdStart(fakeQuery({ dataUpdateCount: 0, fetchFailureCount: 1 }))).toBe(true);
+    expect(isColdStart(fakeResult({ dataUpdatedAt: 0, failureCount: 1 }))).toBe(true);
   });
 
   it("is false before any failure", () => {
-    expect(isColdStart(fakeQuery({ dataUpdateCount: 0, fetchFailureCount: 0 }))).toBe(false);
+    expect(isColdStart(fakeResult({ dataUpdatedAt: 0, failureCount: 0 }))).toBe(false);
   });
 
   it("is false once the query has succeeded at least once, even if it later fails", () => {
-    expect(isColdStart(fakeQuery({ dataUpdateCount: 1, fetchFailureCount: 1 }))).toBe(false);
+    expect(isColdStart(fakeResult({ dataUpdatedAt: 1_700_000_000_000, failureCount: 1 }))).toBe(false);
   });
 });

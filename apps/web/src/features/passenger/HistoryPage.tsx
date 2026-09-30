@@ -92,7 +92,7 @@ export function HistoryPage() {
         ) : query.isError ? (
           <ErrorBanner
             message="We can't reach the server. Retry."
-            coldStart={isColdStart(query as never)}
+            coldStart={isColdStart(query)}
             onRetry={() => void query.refetch()}
           />
         ) : query.data.data.length === 0 ? (

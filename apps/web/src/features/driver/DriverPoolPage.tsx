@@ -191,7 +191,7 @@ export function DriverPoolPage() {
       <PageContainer className="flex flex-1 items-center">
         <ErrorBanner
           message="We can't reach the server. Retry."
-          coldStart={isColdStart(poolQuery as never)}
+          coldStart={isColdStart(poolQuery)}
           onRetry={() => void poolQuery.refetch()}
         />
       </PageContainer>

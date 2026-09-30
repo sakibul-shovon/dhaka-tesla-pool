@@ -171,7 +171,7 @@ export function DriverDashboardPage() {
       <PageContainer className="flex flex-1 items-center">
         <ErrorBanner
           message="We can't reach the server. Retry."
-          coldStart={isColdStart(statusQuery as never)}
+          coldStart={isColdStart(statusQuery)}
           onRetry={() => void statusQuery.refetch()}
         />
       </PageContainer>

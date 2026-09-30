@@ -178,7 +178,7 @@ export function PassengerHomePage() {
       <PageContainer className="flex flex-1 items-center">
         <ErrorBanner
           message="We can't reach the server. Retry."
-          coldStart={isColdStart(recentRidesQuery as never) || isColdStart(zonesQuery as never)}
+          coldStart={isColdStart(recentRidesQuery) || isColdStart(zonesQuery)}
           onRetry={() => {
             void recentRidesQuery.refetch();
             void zonesQuery.refetch();

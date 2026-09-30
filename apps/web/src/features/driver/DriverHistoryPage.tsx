@@ -51,7 +51,7 @@ export function DriverHistoryPage() {
       <PageContainer>
         <ErrorBanner
           message="We can't reach the server. Retry."
-          coldStart={isColdStart(query as never)}
+          coldStart={isColdStart(query)}
           onRetry={() => void query.refetch()}
         />
       </PageContainer>

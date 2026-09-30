@@ -311,11 +311,10 @@ This brings up, in dependency order: `db` (Postgres, health-gated) → `migrate`
 seeds the demo cast if `SEED_DEMO=true`, one-shot) → `api` (health-gated on `/api/v1/readyz`) → `web`
 (nginx, health-gated on `api`). Open `http://localhost:8080`.
 
-> **Sandbox note:** this exact command could not be executed inside the environment this project was
-> built in (its outbound network blocks Docker Hub's registry). Every image, healthcheck and dependency
-> gate was written and reviewed by hand, and each piece's underlying command was verified by running it
-> as a separate local process against the same Postgres image tag — but this is the first thing to run
-> on a machine with normal Docker Hub access. See [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
+> **Verified:** run on Windows 11 with Docker Desktop, all four services report healthy, `migrate`
+> exits 0 after seeding the demo cast, and logging in as a demo user through the `web` container's
+> `/api` proxy works. If host port 8080 is already in use, change the `web` service's port mapping in
+> `docker-compose.yml` (for example to `8081:80`) and set the API's `WEB_ORIGIN` to match.
 
 ### Option B — run services individually
 

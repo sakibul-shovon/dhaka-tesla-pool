@@ -40,14 +40,9 @@ assumption in [`docs/ASSUMPTIONS.md`](ASSUMPTIONS.md).
   is documented as the first thing to change if the hosted deployment's cookie ever fails to survive a
   proxy (see the deployment checklist).
 
-## Sandbox-specific, not product limitations
+## Docker Compose verification
 
-These exist because of the environment this project was *built* in, not because of anything in the
-running application:
-
-- `docker compose up --build` could not be executed inside the development sandbox this project was
-  built in (its outbound network blocks Docker Hub's registry host). Every Dockerfile, compose service
-  and healthcheck was written and reviewed by hand and the equivalent behavior was verified by running
-  Postgres, the API and the web dev server as separate local processes against the same images'
-  underlying commands — but the actual `docker compose up --build` command itself should be the first
-  thing run on a machine with normal Docker Hub access before trusting it further.
+`docker compose up --build` was first written without being runnable in the development sandbox (its
+network blocked Docker Hub), so it was reviewed by hand and checked piece by piece. It has since been run
+end to end on a Windows 11 machine with Docker Desktop: every service healthy, `migrate` exiting 0 after
+seeding the demo cast, and a demo login working through the `web` container's `/api` proxy.
